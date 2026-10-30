@@ -67,6 +67,8 @@ input[type="text"] { font: 500 14px var(--f-body); padding: 6px 10px; border-rad
 .setup { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
 .setup .grp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .setup .note { font-size: 12px; color: var(--muted); flex-basis: 100%; margin: 0; }
+.setup .verdict { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: 8px; border-left: 4px solid var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--panel)); font-size: 14px; }
+.setup .verdict b { color: var(--bad); }
 
 .main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; align-items: start; }
 @media (max-width: 960px) { .main { grid-template-columns: minmax(0, 1fr); } }
@@ -212,6 +214,7 @@ details.panel > summary { cursor: pointer; font-weight: 500; }
       <button class="btn primary" id="room-join">입장</button>
       <button class="btn" id="ready" hidden>준비</button>
     </div>
+    <p class="verdict" id="verdict" role="status" hidden></p>
     <p class="note" id="setup-note">봇은 실제 판을 풀지 않고 진행 속도와 공격만 흉내 냅니다. 규칙과 수치 감각을 맞추는 용도예요.</p>
   </section>
 
@@ -481,6 +484,7 @@ const held = new Set();
 let cellEls = [];
 
 function newMatch(seed, myName, oppName) {
+  $('verdict').hidden = true;
   const { w, h, m } = CFG;
   const NB = neighbors(w, h);
   const { mines, start } = makeMatchBoard(seed, w, h, m);
@@ -934,6 +938,15 @@ function showResult(r) {
   if (G) { G.phase = 'over'; G.finished = true; G.defense = null; $('ov-def').hidden = true; G.marks = []; renderAll(); }
   const meRow = r.rows.find(x => x.me);
   const won = meRow && r.winnerIdx === r.rows.indexOf(meRow);
+  // loss by concession (can no longer beat the finished opponent): no popup, just a note above the start controls
+  if (meRow && meRow.conceded && !won) {
+    const opp = r.rows.find(x => !x.me);
+    const v = $('verdict');
+    v.innerHTML = `<b>불계패</b> · ${esc(opp ? opp.name : '상대')}의 점수 ${(() => { const sc = opp && opp.score != null ? opp.score : G && G.opp.score; return sc != null ? (sc / 1000).toFixed(1) : '–'; })()}을 더는 넘을 수 없어 경기가 끝났습니다. ${mode === 'bot' ? '다시 하려면 시작을 누르세요.' : '다시 하려면 준비를 누르세요.'}`;
+    v.hidden = false;
+    $('setup').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
   const t = $('res-title'); t.textContent = r.winnerIdx == null ? '무승부' : won ? '승리!' : '패배'; t.className = r.winnerIdx == null ? '' : won ? 'win' : 'lose';
   $('res-body').innerHTML = r.rows.map(x => `<tr class="${x.me ? 'me' : ''}"><td>${esc(x.name)}</td><td>${x.finished ? (x.time / 1000).toFixed(1) : '미완료'}</td><td>${x.first ? '×0.7' : '–'}</td><td>${x.steps}</td><td>${x.finished ? x.nf : '–'}</td><td>${x.score != null ? (x.score / 1000).toFixed(1) : (x.note || '–')}</td></tr>`).join('');
   $('ov-res').hidden = false;
@@ -1015,7 +1028,7 @@ function makeBotNet(lv) {
     const botDone = !!b.final;
     const botScore = botDone ? score(b.final.time, b.first, b.final.steps, b.final.nf) : null;
     const rows = [
-      { name: G.me, me: true, finished: meDone, time: mine.time, first: meFirst, steps: mine.steps, nf: mine.nf, score: meScore, note: '포기' },
+      { name: G.me, me: true, conceded: !!mine.conceded, finished: meDone, time: mine.time, first: meFirst, steps: mine.steps, nf: mine.nf, score: meScore, note: '포기' },
       { name: G.opp.name, finished: botDone, time: botDone ? b.final.time : b.time, first: botDone && b.first, steps: b.steps, nf: botDone ? b.final.nf : 0, score: botScore, note: b.gaveUp ? '포기' : '미완료' },
     ];
     let w = null;
