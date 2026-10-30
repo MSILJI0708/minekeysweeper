@@ -457,6 +457,7 @@ const CFG = {
   firstMul: 0.7, stepMul: 1.1, nfMul: 0.99,
   slowPuzzle: 0.5,
   bounceGapMs: 45, bounceHoldMs: 35, // a press this soon after the last release AND this short is mouse switch bounce
+  residualMs: 150, // a press this soon after the last release, with the very same keys still held, that would now be a miss, is leftover input
 };
 const KEYS = ['KeyQ','KeyW','KeyE','KeyR','KeyA','KeyS','KeyD','KeyF','KeyZ','KeyX','KeyC','KeyV'];
 const KEY_SET = new Set(KEYS);
@@ -851,7 +852,7 @@ function paintPress(i) {
   t.forEach(k => { if (!G.open[k] && !G.flag[k]) { cellEls[k].classList.add('press'); pressed.push(cellEls[k]); } });
 }
 boardEl.addEventListener('contextmenu', e => e.preventDefault());
-let lastUpT = -1e9;
+let lastUpT = -1e9, lastSnap = '';
 const inLog = [];
 function inputLog(line) { inLog.unshift(line); inLog.length = Math.min(inLog.length, 10); const el = $('inlog'); if (el) el.textContent = inLog.join('\n'); }
 const keyStr = set => [...set].filter(c => KEY_SET.has(c) || c === 'ShiftLeft').map(c => LABEL[c]).join('+') || '없음';
@@ -877,7 +878,12 @@ window.addEventListener('mouseup', e => {
   const head = `${kind} 누름 ${hold.toFixed(0)}ms · 직전 뗌 후 ${Math.min(done.gap, 9999).toFixed(0)}ms · 키 ${keyStr(done.snap)}`;
   // switch bounce: a ghost press right after the previous release, far shorter than a real click
   if (done.gap < CFG.bounceGapMs && hold < CFG.bounceHoldMs) { inputLog(head + ' → 마우스 튐으로 보고 무시'); return; }
-  lastUpT = now;
+  const action = done.chord ? 'chord' : done.first, snapKey = keyStr(done.snap);
+  // leftover press: e.g. a finger rebounding right after releasing a chord, keys unchanged since that attempt
+  if (G && done.gap < CFG.residualMs && snapKey === lastSnap && !sameSet(gotOf(done.snap), needOf(action))) {
+    lastUpT = now; inputLog(head + ' → 직전 시행의 잔여 입력으로 보고 무시'); return;
+  }
+  lastUpT = now; lastSnap = snapKey;
   const i = cellIndexAt(e.clientX, e.clientY);
   if (i < 0 || !G) { inputLog(head + ' → 판 밖'); return; }
   // defense marker: a plain left click, no keys needed
