@@ -664,6 +664,9 @@ function applyHit(n, m) {
   setStatus(`피격! ${n}×${n}이 덮였고, 다음 ${m}회 시행은 좌·우클릭 키 2개, 화음 키 2개 + LShift가 필요합니다.`, 'bad');
 }
 // 10x10 puzzle: every safe cell open except one, which must be the only consistent choice
+// 10x10 defense puzzle: the end state of a real game. Every safe cell is open except one, s.
+// Like a real board, no open 0 touches a hidden cell (a 0 would have opened s by cascade), s itself is a number,
+// and s must be provably safe from the visible numbers alone (no flags, no mine count, no "one cell left" hint).
 function makePuzzle() {
   const w = 10, h = 10, N = 100, NB = neighbors(w, h);
   for (;;) {
@@ -671,16 +674,26 @@ function makePuzzle() {
     const idx = [...Array(N).keys()];
     for (let k = 0; k < mc; k++) { const j = k + Math.floor(Math.random() * (N - k)); [idx[k], idx[j]] = [idx[j], idx[k]]; mines[idx[k]] = true; }
     const count = mines.map((_, i) => NB[i].filter(j => mines[j]).length);
-    const safe = idx.filter(i => !mines[i]);
-    const s = safe[Math.floor(Math.random() * safe.length)];
-    // the answer must touch at least one mine (never a blank 0 cell) and at least one revealed number
-    if (count[s] === 0 || !NB[s].some(j => !mines[j])) continue;
-    const revealedNb = i => new Set(NB[i].filter(j => !mines[j] && j !== s));
-    const sN = revealedNb(s);
-    const unique = idx.filter(i => mines[i]).every(hc => { const hN = revealedNb(hc);
-      for (const r of sN) if (!hN.has(r)) return true; for (const r of hN) if (!sN.has(r)) return true; return false; });
-    if (unique) return { w, h, mines, count, s };
+    const cand = idx.filter(i => !mines[i] && count[i] > 0 && NB[i].some(j => !mines[j]) && NB[i].every(j => mines[j] || count[j] > 0));
+    for (let k = cand.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [cand[k], cand[j]] = [cand[j], cand[k]]; }
+    for (const s of cand.slice(0, 12)) if (puzzleProvesSafe(N, NB, mines, count, s)) return { w, h, mines, count, s };
   }
+}
+function puzzleProvesSafe(N, NB, mines, count, s) {
+  const hidden = i => mines[i] || i === s;
+  const cons = [];
+  for (let r = 0; r < N; r++) {
+    if (hidden(r)) continue;
+    const hn = NB[r].filter(hidden);
+    if (hn.length) cons.push({ cells: hn, need: count[r] });
+  }
+  const byCell = new Map();
+  cons.forEach((c, ci) => c.cells.forEach(x => { let a = byCell.get(x); if (!a) byCell.set(x, a = []); a.push(ci); }));
+  if (!byCell.has(s)) return false;
+  const cells = [s], seen = new Set([s]), cset = new Set();
+  for (let q = 0; q < cells.length; q++) for (const ci of byCell.get(cells[q])) { cset.add(ci); for (const y of cons[ci].cells) if (!seen.has(y)) { seen.add(y); cells.push(y); } }
+  const r = enumerate({ cells, cons: cset }, cons, cells.length);
+  return !!r && r.mineIn[0] === 0; // cells[0] is s: a mine in no consistent arrangement
 }
 function renderPuzzle() {
   const P = G.defense.pz, el = $('pz'); let html = '';
