@@ -664,7 +664,8 @@ function makePuzzle() {
     const count = mines.map((_, i) => NB[i].filter(j => mines[j]).length);
     const safe = idx.filter(i => !mines[i]);
     const s = safe[Math.floor(Math.random() * safe.length)];
-    if (!NB[s].some(j => !mines[j])) continue;
+    // the answer must touch at least one mine (never a blank 0 cell) and at least one revealed number
+    if (count[s] === 0 || !NB[s].some(j => !mines[j])) continue;
     const revealedNb = i => new Set(NB[i].filter(j => !mines[j] && j !== s));
     const sN = revealedNb(s);
     const unique = idx.filter(i => mines[i]).every(hc => { const hN = revealedNb(hc);
