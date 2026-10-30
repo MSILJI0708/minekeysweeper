@@ -265,9 +265,9 @@ details.panel > summary { cursor: pointer; font-weight: 500; }
           <li><b>키</b>: 좌클릭·우클릭은 지정 키 1개, 화음은 지정 키 2개. 시행마다 키가 바뀌고 두 사람은 같은 순서의 키를 받습니다. 틀리면 그 동작은 올바른 입력 3회 동안 잠깁니다.</li>
           <li><b>판</b>: 두 사람이 같은 16×16(지뢰 40) 판을 받고, 판은 끝까지 그대로입니다. 시작 칸은 미리 열려 있습니다.</li>
           <li><b>게이지</b>: 안전한 칸을 처음 열 때마다 2.5%. 덮였다가 다시 연 칸은 충전되지 않습니다. 상한 300%.</li>
-          <li><b>공격</b>: 게이지 100% 이상에서 화음으로 칸 2개 이상을 직접 열면 자동 발동. 위력 n = 화음 중심 숫자, m = 화음이 직접 연 칸 수. 공격 후 4초간 공격 불가.</li>
-          <li><b>방어</b>: 내 판에 파란 표시가 뜨면 4초 안에 키 없이 좌클릭해서 10×10 퍼즐을 열고, 남은 안전한 칸 하나를 누르면 방어 성공. 게이지 +100% + 남은 초 × 20%. 퍼즐을 여는 동안 내 시간은 절반 속도로 흐릅니다.</li>
-          <li><b>피격</b>: 주변 8칸이 모두 해결된 열린 칸 하나를 골라 n×n을 덮고 깃발도 지웁니다. 짝수 크기면 피격 칸이 왼쪽 위 사분면의 오른쪽 아래 칸이 됩니다. 이어서 m번의 시행 동안 좌·우클릭은 키 2개, 화음은 키 2개 + 왼쪽 Shift가 필요하고, 끝나면 게이지 +50%.</li>
+          <li><b>공격</b>: 게이지 100% 이상에서 화음으로 칸 2개 이상을 직접 열면 자동 발동. 위력 n = 화음 중심 숫자, m = 화음이 직접 연 칸 수. 공격 후 5초간(상대 방어 시간) 공격 불가.</li>
+          <li><b>방어</b>: 내 판에 파란 표시가 뜨면 5초 안에 키 없이 좌클릭해서 10×10 퍼즐을 열고, 남은 안전한 칸 하나를 누르면 방어 성공. 게이지 +100% + 남은 초 × 20%. 퍼즐을 여는 동안 내 시간은 절반 속도로 흐릅니다.</li>
+          <li><b>피격</b>: 주변 8칸이 모두 해결된 열린 칸 하나를 골라 n×n을 덮고 깃발도 지웁니다. 짝수 크기면 피격 칸이 왼쪽 위 사분면의 오른쪽 아래 칸이 됩니다. 이어서 m번의 시행 동안 좌·우클릭은 키 2개, 화음은 키 2개 + 왼쪽 Shift가 필요합니다. m번을 다 쓰면 직접 해제로 게이지 +30%, 그 전에 10초가 지나면 보상 없이 풀립니다. 디버프가 겹치면 앞의 것이 끝난 뒤 다음 것이 시작됩니다.</li>
           <li><b>지뢰 밟음</b>: 게임은 계속되고, 밟은 칸 중심 7×7을 덮고 깃발을 지웁니다.</li>
           <li><b>점수</b>(낮을수록 승리): 내 시간 × 선착 0.7 × 지뢰 밟음 1회당 1.1 × 깃발 없는 지뢰 1개당 0.99. 늦게 끝내는 쪽이 이길 수 없게 확정되면 바로 종료.</li>
         </ul>
@@ -452,8 +452,9 @@ const CFG = {
   w: 16, h: 16, m: 40,
   stepCover: 7,            // mine step covers 7x7 (intermediate); 9x9 on expert
   gaugePerCell: 2.5, gaugeCap: 300,
-  defenseMs: 4000, defBase: 100, defPerSec: 20,
-  attackLockMs: 4000, debuffEndGauge: 50,
+  defenseMs: 5000, defBase: 100, defPerSec: 20,
+  attackLockMs: 5000, debuffEndGauge: 30, // only when the debuff is cleared by using up its attempts, not when it times out // attack lock matches the defender's solving time
+  debuffMs: 10000, // a debuff ends after this much of my game time even if attempts remain
   firstMul: 0.7, stepMul: 1.1, nfMul: 0.99,
   slowPuzzle: 0.5,
   bounceGapMs: 45, bounceHoldMs: 35, // a press this soon after the last release AND this short is mouse switch bounce
@@ -572,8 +573,15 @@ function attempt(action, i, snap) {
 }
 function consumeDebuff() {
   if (!G.debuffs.length) return;
-  G.debuffs[0]--;
-  if (G.debuffs[0] <= 0) { G.debuffs.shift(); addGauge(CFG.debuffEndGauge); log(`디버프 종료 · 게이지 +${CFG.debuffEndGauge}%`, 'gain'); }
+  G.debuffs[0].n--;
+  if (G.debuffs[0].n <= 0) endDebuff(true);
+}
+function endDebuff(byHand) {
+  G.debuffs.shift();
+  if (byHand) addGauge(CFG.debuffEndGauge);
+  if (G.debuffs.length) G.debuffs[0].t0 = G.time;
+  log(byHand ? `디버프 직접 해제 · 게이지 +${CFG.debuffEndGauge}%` : '디버프 10초 경과로 해제', byHand ? 'gain' : '');
+  renderActs();
 }
 function execute(action, i) {
   if (action === 'left') {
@@ -620,7 +628,7 @@ function incoming(id, n, m) {
   const cell = Math.floor(Math.random() * G.w * G.h);
   G.marks.push({ id, n, m, cell, t0: performance.now(), opened: false });
   log(`공격 받음 #${id} · ${n}×${n}, 디버프 ${m}회 · 파란 칸을 누르세요`, 'def');
-  setStatus('공격이 들어왔습니다! 파란 칸을 좌클릭해서 방어 퍼즐을 여세요 (4초)', 'mark');
+  setStatus('공격이 들어왔습니다! 파란 칸을 좌클릭해서 방어 퍼즐을 여세요 (5초)', 'mark');
   renderAll();
 }
 function openDefense(mk) {
@@ -651,7 +659,7 @@ function applyHit(n, m) {
     const c = cand[Math.floor(Math.random() * cand.length)];
     flashCover(coverSquare(c % G.w, (c / G.w) | 0, n));
   }
-  G.debuffs.push(m);
+  G.debuffs.push({ n: m, t0: G.debuffs.length ? null : G.time });
   log(`피격 · ${n}×${n} 덮임, 디버프 ${m}회`, 'hit');
   setStatus(`피격! ${n}×${n}이 덮였고, 다음 ${m}회 시행은 좌·우클릭 키 2개, 화음 키 2개 + LShift가 필요합니다.`, 'bad');
 }
@@ -756,7 +764,7 @@ function renderActs() {
     el.classList.toggle('locked', n > 0);
     const sub = el.querySelector('.sub');
     if (n > 0) { sub.className = 'sub lock'; sub.textContent = `잠김 · ${n}회 남음`; }
-    else if (debuffOn()) { sub.className = 'sub debuff'; sub.textContent = `디버프 · ${G.debuffs.reduce((s, x) => s + x, 0)}회 남음`; }
+    else if (debuffOn()) { sub.className = 'sub debuff'; const d = G.debuffs[0], left = Math.max(0, (CFG.debuffMs - (G.time - d.t0)) / 1000); sub.textContent = `디버프 · ${d.n}회 또는 ${left.toFixed(1)}초${G.debuffs.length > 1 ? ` (+${G.debuffs.length - 1}개 대기)` : ''}`; }
     else { sub.className = 'sub'; sub.textContent = '사용 가능'; }
   });
   renderHeld();
@@ -810,6 +818,10 @@ function frame(now) {
     for (const mk of [...G.marks]) {
       const remain = CFG.defenseMs - (now - mk.t0);
       if (remain <= 0) { if (G.defense && G.defense.mk === mk) log('방어 시간 초과', 'hit'); endDefense(mk, false); }
+    }
+    if (G.debuffs.length) {
+      if (G.time - G.debuffs[0].t0 >= CFG.debuffMs) endDebuff(false);
+      else if (Math.floor(G.time / 100) !== Math.floor((G.time - dt) / 100)) renderActs();
     }
     if (G.defense) $('def-bar').style.width = Math.max(0, (CFG.defenseMs - (now - G.defense.mk.t0)) / CFG.defenseMs * 100) + '%';
     // opponent already finished: stop as soon as winning is impossible (best case = every mine left unflagged)
@@ -928,7 +940,7 @@ function makeBotNet(lv) {
   const api = {
     attack(n, m) { const id = b.nextId++;
       // bot decides whether it defends; result arrives after its reaction time
-      const willDefend = Math.random() < P.defend, at = performance.now() + (willDefend ? 1200 + Math.random() * 2400 : CFG.defenseMs);
+      const willDefend = Math.random() < P.defend, at = performance.now() + (willDefend ? 1200 + Math.random() * (CFG.defenseMs - 1600) : CFG.defenseMs);
       b.defenses.push({ id, n, m, at, ok: willDefend, remain: willDefend ? Math.max(0, CFG.defenseMs - (at - performance.now())) : 0 });
       return id; },
     defend(id, ok) { const p = b.pending.get(id); if (p) { b.pending.delete(id); if (ok) log(`봇의 공격 #${id}을 막았습니다`, 'def'); } },
@@ -947,7 +959,13 @@ function makeBotNet(lv) {
       const gained = Math.floor(b.opened) - before;
       if (gained > 0 && b.ever < total) { const fresh = Math.min(gained, total - b.ever); b.ever += fresh; b.gauge = Math.min(CFG.gaugeCap, b.gauge + fresh * CFG.gaugePerCell); }
       // debuff on bot: count its "attempts" roughly once per opened cell
-      if (gained > 0 && b.debuffs.length) { b.debuffs[0] -= gained; if (b.debuffs[0] <= 0) { b.debuffs.shift(); b.gauge = Math.min(CFG.gaugeCap, b.gauge + CFG.debuffEndGauge); } b.slowUntil = b.debuffs.length ? now + 800 : 0; }
+      if (b.debuffs.length) {
+        if (b.debuffT0 == null) b.debuffT0 = b.time;
+        if (gained > 0) b.debuffs[0] -= gained;
+        const byHand = b.debuffs[0] <= 0;
+        if (byHand || b.time - b.debuffT0 >= CFG.debuffMs) { b.debuffs.shift(); b.debuffT0 = null; if (byHand) b.gauge = Math.min(CFG.gaugeCap, b.gauge + CFG.debuffEndGauge); }
+        b.slowUntil = b.debuffs.length ? now + 800 : 0;
+      }
       if (Math.random() < P.stepPerSec * dt / 1000) { b.steps++; b.opened = Math.max(0, b.opened - 20); log('봇이 지뢰를 밟았습니다', 'gain'); }
       if (G.phase === 'play' && b.gauge >= 100 && now >= b.lockUntil && Math.random() < P.attackPerSec * dt / 1000) {
         b.gauge -= 100; b.lockUntil = now + CFG.attackLockMs;
