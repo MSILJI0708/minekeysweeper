@@ -175,6 +175,7 @@ input[type="text"] { font: 500 14px var(--f-body); padding: 6px 10px; border-rad
 .rules { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
 .rules b { color: var(--ink); font-weight: 500; }
 details.panel > summary { cursor: pointer; font-weight: 500; }
+.inlog { margin: 8px 0 0; padding: 8px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font: 11px/1.55 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
 </style>
 </head>
 <body>
@@ -254,6 +255,10 @@ details.panel > summary { cursor: pointer; font-weight: 500; }
         <span class="label">기록</span>
         <ul class="log" id="log"></ul>
       </div>
+      <details class="panel">
+        <summary>입력 기록</summary>
+        <pre class="inlog" id="inlog">클릭하면 누른 시간, 직전 클릭과의 간격, 판정에 쓴 키가 여기 남습니다.</pre>
+      </details>
       <details class="panel">
         <summary>규칙</summary>
         <ul class="rules">
@@ -451,6 +456,7 @@ const CFG = {
   attackLockMs: 4000, debuffEndGauge: 50,
   firstMul: 0.7, stepMul: 1.1, nfMul: 0.99,
   slowPuzzle: 0.5,
+  bounceGapMs: 45, bounceHoldMs: 35, // a press this soon after the last release AND this short is mouse switch bounce
 };
 const KEYS = ['KeyQ','KeyW','KeyE','KeyR','KeyA','KeyS','KeyD','KeyF','KeyZ','KeyX','KeyC','KeyV'];
 const KEY_SET = new Set(KEYS);
@@ -843,13 +849,17 @@ function paintPress(i) {
   t.forEach(k => { if (!G.open[k] && !G.flag[k]) { cellEls[k].classList.add('press'); pressed.push(cellEls[k]); } });
 }
 boardEl.addEventListener('contextmenu', e => e.preventDefault());
+let lastUpT = -1e9;
+const inLog = [];
+function inputLog(line) { inLog.unshift(line); inLog.length = Math.min(inLog.length, 10); const el = $('inlog'); if (el) el.textContent = inLog.join('\n'); }
+const keyStr = set => [...set].filter(c => KEY_SET.has(c) || c === 'ShiftLeft').map(c => LABEL[c]).join('+') || '없음';
 boardEl.addEventListener('mousedown', e => {
   if (e.button !== 0 && e.button !== 2) return;
   e.preventDefault();
   if (!G || G.phase !== 'play' || G.finished) return;
   const b = e.button === 0 ? 'left' : 'right';
   if (!e.shiftKey) { held.delete('ShiftLeft'); held.delete('ShiftRight'); }
-  if (!ms) ms = { L: false, R: false, chord: false, first: b, snap: null };
+  if (!ms) { const now = performance.now(); ms = { L: false, R: false, chord: false, first: b, snap: null, t0: now, gap: now - lastUpT }; }
   ms[b === 'left' ? 'L' : 'R'] = true; ms.snap = new Set(held);
   if (ms.L && ms.R) ms.chord = true;
   paintPress(cellIndexAt(e.clientX, e.clientY));
@@ -860,12 +870,19 @@ window.addEventListener('mouseup', e => {
   if (e.button === 0) ms.L = false; else if (e.button === 2) ms.R = false; else return;
   if (ms.L || ms.R) return;
   const done = ms; ms = null; paintPress(-1);
+  const now = performance.now(), hold = now - done.t0;
+  const kind = done.chord ? '화음' : done.first === 'left' ? '좌' : '우';
+  const head = `${kind} 누름 ${hold.toFixed(0)}ms · 직전 뗌 후 ${Math.min(done.gap, 9999).toFixed(0)}ms · 키 ${keyStr(done.snap)}`;
+  // switch bounce: a ghost press right after the previous release, far shorter than a real click
+  if (done.gap < CFG.bounceGapMs && hold < CFG.bounceHoldMs) { inputLog(head + ' → 마우스 튐으로 보고 무시'); return; }
+  lastUpT = now;
   const i = cellIndexAt(e.clientX, e.clientY);
-  if (i < 0 || !G) return;
+  if (i < 0 || !G) { inputLog(head + ' → 판 밖'); return; }
   // defense marker: a plain left click, no keys needed
   const mk = !done.chord && done.first === 'left' && G.marks.find(m => !m.opened && m.cell === i);
   if (mk) { openDefense(mk); return; }
   attempt(done.chord ? 'chord' : done.first, i, done.snap);
+  inputLog(head + ' → ' + $('status').textContent.slice(0, 40));
 });
 
 // ---------- match flow ----------
