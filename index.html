@@ -201,9 +201,13 @@ details.panel > summary { cursor: pointer; font-weight: 500; }
     <div class="grp" id="bot-opts">
       <span class="label">봇 실력</span>
       <div class="seg" role="group" aria-label="봇 실력">
-        <button id="b-easy" data-lv="easy" aria-pressed="false">느림</button>
-        <button id="b-normal" data-lv="normal" aria-pressed="true">보통</button>
-        <button id="b-hard" data-lv="hard" aria-pressed="false">빠름</button>
+        <button id="b-1" data-lv="1" aria-pressed="false" title="Lv.1">1</button>
+        <button id="b-2" data-lv="2" aria-pressed="false" title="Lv.2">2</button>
+        <button id="b-3" data-lv="3" aria-pressed="false" title="Lv.3">3</button>
+        <button id="b-4" data-lv="4" aria-pressed="true" title="Lv.4">4</button>
+        <button id="b-5" data-lv="5" aria-pressed="false" title="Lv.5">5</button>
+        <button id="b-6" data-lv="6" aria-pressed="false" title="Lv.6">6</button>
+        <button id="b-7" data-lv="7" aria-pressed="false" title="Lv.7">7</button>
       </div>
       <button class="btn primary" id="bot-start">시작</button>
     </div>
@@ -478,7 +482,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
 
 let G = null;          // current match
-let mode = 'bot', botLv = 'normal', rotated = !!store.get('ms1v1-rot');
+let mode = 'bot', botLv = 4, rotated = !!store.get('ms1v1-rot');
 let net = null;        // opponent adapter (bot or socket)
 const held = new Set();
 let cellEls = [];
@@ -955,11 +959,17 @@ $('res-close').addEventListener('click', () => { $('ov-res').hidden = true; });
 $('res-again').addEventListener('click', () => { $('ov-res').hidden = true; if (mode === 'bot') startBot(); else if (net && net.ready) net.ready(); });
 
 // ===================== bot opponent =====================
-const BOT = {
-  easy:   { rate: 1.2, defend: 0.25, stepPerSec: 0.012, attackPerSec: 0.25 },
-  normal: { rate: 1.8, defend: 0.45, stepPerSec: 0.008, attackPerSec: 0.4 },
-  hard:   { rate: 2.6, defend: 0.7,  stepPerSec: 0.005, attackPerSec: 0.6 },
-};
+// Lv.3 = old "slow", Lv.6 = old "fast". Speed and mine-step rate scale geometrically, defense and attack rates linearly.
+const BOT = {};
+for (let lv = 1; lv <= 7; lv++) {
+  const k = (lv - 3) / 3; // 0 at Lv.3, 1 at Lv.6
+  BOT[lv] = {
+    rate: 1.2 * Math.pow(2.6 / 1.2, k),               // safe cells opened per second
+    defend: Math.min(0.9, Math.max(0.05, 0.25 + 0.45 * k)),  // chance to beat a defense puzzle
+    stepPerSec: 0.012 * Math.pow(0.005 / 0.012, k),   // chance per second to step on a mine
+    attackPerSec: Math.max(0.05, 0.25 + 0.35 * k),    // chance per second to fire once the gauge is full
+  };
+}
 function makeBotNet(lv) {
   const P = BOT[lv];
   const b = { opened: 0, ever: 0, gauge: 0, steps: 0, slowUntil: 0, debuffs: [], lockUntil: 0, finished: false, time: 0, nextId: 1, pending: new Map(), defenses: [], started: false };
@@ -1040,7 +1050,7 @@ function makeBotNet(lv) {
 }
 function startBot() {
   net = makeBotNet(botLv);
-  newMatch((Math.random() * 2 ** 32) >>> 0, '나', `봇 (${{ easy: '느림', normal: '보통', hard: '빠름' }[botLv]})`);
+  newMatch((Math.random() * 2 ** 32) >>> 0, '나', `봇 Lv.${botLv}`);
   countdown(beginPlay);
 }
 
@@ -1096,7 +1106,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click'
   } else setNote('봇은 실제 판을 풀지 않고 진행 속도와 공격만 흉내 냅니다. 규칙과 수치 감각을 맞추는 용도예요.');
 }));
 document.querySelectorAll('[data-lv]').forEach(b => b.addEventListener('click', () => {
-  botLv = b.dataset.lv; document.querySelectorAll('[data-lv]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  botLv = +b.dataset.lv; store.set('ms1v1-botlv', botLv); document.querySelectorAll('[data-lv]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
 }));
 $('bot-start').addEventListener('click', e => { e.currentTarget.blur(); startBot(); });
 $('room-new').addEventListener('click', () => { $('room').value = Math.random().toString(36).slice(2, 7).toUpperCase(); });
@@ -1116,8 +1126,10 @@ $('rotate').addEventListener('click', e => { e.currentTarget.blur(); rotated = !
 applyRotate();
 
 // idle preview board so the page is never empty
-net = makeBotNet('normal');
-newMatch(0xC0FFEE, '나', '봇 (보통)');
+botLv = Math.min(7, Math.max(1, +store.get('ms1v1-botlv') || 4));
+document.querySelectorAll('[data-lv]').forEach(x => x.setAttribute('aria-pressed', String(+x.dataset.lv === botLv)));
+net = makeBotNet(botLv);
+newMatch(0xC0FFEE, '나', `봇 Lv.${botLv}`);
 G.phase = 'idle';
 renderAll();
 setStatus('모드를 고르고 시작을 누르세요. 아래는 미리 보기 판입니다.');
