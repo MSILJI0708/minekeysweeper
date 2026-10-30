@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>강화 지뢰찾기 1v1 · 봇전</title>
+<meta name="description" content="12개 키와 화음 공격으로 봇과 겨루는 강화 지뢰찾기">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5v13M1.5 8h13M3.6 3.6l8.8 8.8M12.4 3.6l-8.8 8.8' stroke='%231b1f25' stroke-width='1.4'/%3E%3Ccircle cx='8' cy='8' r='4.2' fill='%231b1f25'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+html { color-scheme: light; }
+body { margin: 0; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* Layout: tall board on the left; my gauge + key cards, opponent card and event log on the right; overlays for countdown, defense puzzle and result */
+:root {
+  --bg: #e5e8ec; --panel: #f5f6f8; --ink: #1b1f25; --muted: #5b636f; --line: #c7ccd4;
+  --cap: #fcfcfd; --cap-edge: #aab1bb; --cap-down: #d8dce2;
+  --open: #dde1e6; --open-line: #c9ced5; --boom: #f2c4c9;
+  --left: #2a5fc7; --right: #cf531b; --chord: #7a43c8; --bad: #c22f3f; --good: #1e7f48;
+  --mark: #1f6feb; --gauge: #b7740a; --scrim: rgb(15 18 22 / .55);
+  --n1: #2a5fc7; --n2: #1e7f48; --n3: #c22f3f; --n4: #2f2a8f; --n5: #8a3a10; --n6: #127a79; --n7: #1b1f25; --n8: #6a717c;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --cs: 30px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15171b; --panel: #1e2126; --ink: #e5e8ec; --muted: #98a0ab; --line: #333840;
+  --cap: #3b4049; --cap-edge: #202328; --cap-down: #2b2f36;
+  --open: #23272d; --open-line: #2e333a; --boom: #5a2129;
+  --left: #73a0f2; --right: #f0884f; --chord: #b38cf2; --bad: #f06a78; --good: #5cc98a;
+  --mark: #4c9bff; --gauge: #e3a83e; --scrim: rgb(0 0 0 / .6);
+  --n1: #73a0f2; --n2: #5cc98a; --n3: #f06a78; --n4: #a99cf5; --n5: #e3a066; --n6: #54d0cc; --n7: #e5e8ec; --n8: #9aa2ad;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #15171b; --panel: #1e2126; --ink: #e5e8ec; --muted: #98a0ab; --line: #333840;
+  --cap: #3b4049; --cap-edge: #202328; --cap-down: #2b2f36;
+  --open: #23272d; --open-line: #2e333a; --boom: #5a2129;
+  --left: #73a0f2; --right: #f0884f; --chord: #b38cf2; --bad: #f06a78; --good: #5cc98a;
+  --mark: #4c9bff; --gauge: #e3a83e; --scrim: rgb(0 0 0 / .6);
+  --n1: #73a0f2; --n2: #5cc98a; --n3: #f06a78; --n4: #a99cf5; --n5: #e3a066; --n6: #54d0cc; --n7: #e5e8ec; --n8: #9aa2ad;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
+.app { max-width: 1180px; margin: 0 auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 24px; }
+h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+h1 small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; color: var(--ink); font: 500 13px var(--f-body); padding: 7px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.btn { border: 1px solid var(--cap-edge); border-bottom-width: 3px; background: var(--cap); color: var(--ink); font: 500 13px var(--f-body); padding: 6px 14px; border-radius: 8px; cursor: pointer; }
+.btn:active { border-bottom-width: 1px; transform: translateY(2px); }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--left); outline-offset: 2px; }
+input[type="text"] { font: 500 14px var(--f-body); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--cap); color: var(--ink); width: 9em; }
+.label { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+
+.setup { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.setup .grp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.setup .note { font-size: 12px; color: var(--muted); flex-basis: 100%; margin: 0; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; align-items: start; }
+@media (max-width: 960px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.topbar { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; }
+.stat { display: flex; flex-direction: column; }
+.stat b { font: 600 20px var(--f-mono); font-variant-numeric: tabular-nums; }
+.stat.bad b { color: var(--bad); }
+.stat.slow b { color: var(--mark); }
+
+.board-wrap { overflow-x: auto; padding: 4px 0 6px; }
+.board { display: grid; gap: 2px; width: max-content; margin: 0 auto; user-select: none; -webkit-user-select: none; }
+.cell { width: var(--cs); height: var(--cs); display: grid; place-items: center; font: 600 calc(var(--cs) * .5) var(--f-mono); border-radius: 4px; position: relative; }
+.cell svg { width: 70%; height: 70%; }
+.cell.hidden, .cell.flag { background: var(--cap); border: 1px solid var(--cap-edge); border-bottom-width: 3px; }
+.cell.press { background: var(--cap-down); border-bottom-width: 1px; }
+.cell.open { background: var(--open); border: 1px solid var(--open-line); }
+.cell.covered { animation: cov .6s ease-out; }
+@keyframes cov { from { box-shadow: 0 0 0 2px var(--bad) inset; } to { box-shadow: 0 0 0 0 transparent inset; } }
+.cell.mark { background: var(--mark) !important; border-color: var(--mark) !important; color: #fff; cursor: pointer; animation: pulse .7s ease-in-out infinite alternate; }
+@keyframes pulse { from { box-shadow: 0 0 0 0 var(--mark); } to { box-shadow: 0 0 0 5px color-mix(in srgb, var(--mark) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .cell.mark, .cell.covered { animation: none; } }
+.n1{color:var(--n1)}.n2{color:var(--n2)}.n3{color:var(--n3)}.n4{color:var(--n4)}.n5{color:var(--n5)}.n6{color:var(--n6)}.n7{color:var(--n7)}.n8{color:var(--n8)}
+.status { font-size: 14px; min-height: 1.5em; }
+.status.bad { color: var(--bad); font-weight: 500; } .status.good { color: var(--good); font-weight: 500; } .status.mark { color: var(--mark); font-weight: 700; }
+
+/* gauge */
+.gauge { display: flex; flex-direction: column; gap: 6px; }
+.ghead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ghead b { font: 600 22px var(--f-mono); font-variant-numeric: tabular-nums; color: var(--gauge); }
+.gbar { position: relative; height: 14px; border-radius: 7px; background: var(--open); border: 1px solid var(--line); overflow: hidden; }
+.gfill { position: absolute; inset: 0 auto 0 0; background: var(--gauge); transition: width .2s; }
+.gbar i { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--panel); }
+.gnote { font-size: 12px; color: var(--muted); min-height: 1.4em; }
+.gnote.on { color: var(--bad); }
+.gauge.ready .gbar { box-shadow: 0 0 0 2px var(--gauge); }
+
+/* action cards */
+.acts { display: flex; flex-direction: column; gap: 8px; }
+.act { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c); transition: background .25s; }
+.act[data-a="left"] { --c: var(--left); } .act[data-a="right"] { --c: var(--right); } .act[data-a="chord"] { --c: var(--chord); }
+.act .name { font-weight: 700; font-size: 14px; }
+.act .name span { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+.act .keys { grid-row: span 2; display: flex; align-items: center; gap: 5px; }
+.act .keys em { font-style: normal; color: var(--muted); }
+.cap { min-width: 40px; height: 40px; padding: 0 7px; display: grid; place-items: center; border-radius: 8px; background: var(--cap); border: 1px solid var(--c); border-bottom-width: 4px; font: 600 20px var(--f-mono); color: var(--ink); }
+.cap.sh { font-size: 12px; }
+.cap.on { background: var(--c); color: var(--panel); border-bottom-width: 1px; transform: translateY(2px); }
+.act .sub { font-size: 12px; color: var(--muted); }
+.act .sub.lock { color: var(--bad); font-weight: 500; }
+.act .sub.debuff { color: var(--right); font-weight: 500; }
+.act.locked .cap { opacity: .5; border-style: dashed; }
+.act.locked .cap.on { opacity: 1; }
+.act.ok { background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
+.act.bad { background: color-mix(in srgb, var(--bad) 16%, var(--panel)); }
+
+/* mini keyboard */
+.mk { display: grid; grid-template-columns: repeat(25, 1fr); grid-auto-rows: 30px; gap: 3px 0; margin-top: 6px; max-width: 300px; }
+.mk div { margin: 0 1.5px; border-radius: 5px; border: 1px solid var(--cap-edge); border-bottom-width: 3px; background: var(--cap); font: 600 12px var(--f-mono); display: grid; place-items: center; position: relative; }
+.mk div.off { border-style: dashed; border-bottom-width: 1px; background: transparent; color: var(--muted); font: 400 10px var(--f-body); opacity: .6; }
+.mk div[data-role="left"] { background: color-mix(in srgb, var(--left) 24%, var(--cap)); border-color: var(--left); }
+.mk div[data-role="right"] { background: color-mix(in srgb, var(--right) 24%, var(--cap)); border-color: var(--right); }
+.mk div[data-role="chord"] { background: color-mix(in srgb, var(--chord) 24%, var(--cap)); border-color: var(--chord); }
+.mk div.down { border-bottom-width: 1px; transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--ink); }
+
+/* opponent */
+.opp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.opp-head b { font-size: 15px; }
+.opp-state { font-size: 12px; color: var(--muted); }
+.obar { height: 10px; border-radius: 5px; background: var(--open); border: 1px solid var(--line); overflow: hidden; margin-top: 6px; }
+.obar span { display: block; height: 100%; background: var(--ink); transition: width .3s; }
+.ogauge span { background: var(--gauge); }
+.ostats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.ostats b { display: block; font: 600 15px var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.log { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; max-height: 210px; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: 46px 1fr; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.log li:last-child { border-bottom: 0; }
+.log time { font-family: var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.log .atk { color: var(--chord); } .log .hit { color: var(--bad); } .log .def { color: var(--mark); } .log .gain { color: var(--gauge); }
+
+/* overlays */
+.ovl { position: fixed; inset: 0; z-index: 70; background: var(--scrim); display: grid; place-items: center; padding: 16px; }
+.dlg { background: var(--panel); color: var(--ink); border-radius: 14px; border: 1px solid var(--line); padding: 16px; box-shadow: 0 20px 50px rgb(0 0 0 / .3); max-width: 100%; }
+.count { font: 600 96px var(--f-mono); color: #fff; text-shadow: 0 4px 20px rgb(0 0 0 / .4); }
+.def .dlg { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.def h2 { margin: 0; font-size: 17px; color: var(--mark); }
+.def p { margin: 0; font-size: 13px; color: var(--muted); }
+.tbar { width: 100%; height: 8px; border-radius: 4px; background: var(--open); overflow: hidden; }
+.tbar span { display: block; height: 100%; background: var(--mark); }
+.pz { display: grid; grid-template-columns: repeat(10, 30px); gap: 2px; user-select: none; }
+.pz .cell { --cs: 30px; }
+.pz .cell.hidden { cursor: pointer; }
+.pz .cell.hidden:hover { background: var(--cap-down); }
+.res .dlg { width: min(560px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.res h2 { margin: 0; font-size: 22px; }
+.res h2.win { color: var(--good); } .res h2.lose { color: var(--bad); }
+.tbl { overflow-x: auto; }
+.tbl table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tbl th, .tbl td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; }
+.tbl td { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.tbl tr.me td { font-weight: 600; }
+.res .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.rules { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.rules b { color: var(--ink); font-weight: 500; }
+details.panel > summary { cursor: pointer; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>강화 지뢰찾기 1v1 · 봇전<small>Q W E R · A S D F · Z X C V 12개 키로 싸우는 같은 판 대전</small></h1>
+    <div class="controls">
+      <button class="btn" id="rotate" aria-pressed="false">가로로 보기</button>
+    </div>
+  </header>
+
+  <section class="panel setup" id="setup">
+    <div class="grp" hidden>
+      <span class="label">모드</span>
+      <div class="seg" role="group" aria-label="모드">
+        <button id="m-bot" data-mode="bot" aria-pressed="true">봇 연습</button>
+        <button id="m-online" data-mode="online" aria-pressed="false">온라인 대전</button>
+      </div>
+    </div>
+    <div class="grp" id="bot-opts">
+      <span class="label">봇 실력</span>
+      <div class="seg" role="group" aria-label="봇 실력">
+        <button id="b-easy" data-lv="easy" aria-pressed="false">느림</button>
+        <button id="b-normal" data-lv="normal" aria-pressed="true">보통</button>
+        <button id="b-hard" data-lv="hard" aria-pressed="false">빠름</button>
+      </div>
+      <button class="btn primary" id="bot-start">시작</button>
+    </div>
+    <div class="grp" id="online-opts" hidden>
+      <input type="text" id="nick" placeholder="닉네임" maxlength="12" autocomplete="off">
+      <input type="text" id="room" placeholder="방 코드" maxlength="8" autocomplete="off">
+      <button class="btn" id="room-new">새 방</button>
+      <button class="btn primary" id="room-join">입장</button>
+      <button class="btn" id="ready" hidden>준비</button>
+    </div>
+    <p class="note" id="setup-note">봇은 실제 판을 풀지 않고 진행 속도와 공격만 흉내 냅니다. 규칙과 수치 감각을 맞추는 용도예요.</p>
+  </section>
+
+  <div class="main">
+    <div class="col">
+      <div class="panel topbar">
+        <div class="stat"><span class="label">시간</span><b id="s-time">0.0</b></div>
+        <div class="stat"><span class="label">남은 칸</span><b id="s-left">–</b></div>
+        <div class="stat"><span class="label">깃발</span><b id="s-flags">0</b></div>
+        <div class="stat bad"><span class="label">지뢰 밟음</span><b id="s-steps">0</b></div>
+        <div class="stat"><span class="label">예상 점수</span><b id="s-score">–</b></div>
+      </div>
+      <div class="panel">
+        <div class="board-wrap"><div class="board" id="board"></div></div>
+        <div class="status" id="status">모드를 고르고 시작하세요.</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel gauge" id="gauge">
+        <div class="ghead"><span class="label">공격 게이지</span><b id="g-val">0%</b></div>
+        <div class="gbar"><div class="gfill" id="g-fill"></div><i style="left:33.33%"></i><i style="left:66.66%"></i></div>
+        <div class="gnote" id="g-note">100% 이상에서 화음으로 칸 2개 이상을 열면 공격이 나갑니다.</div>
+      </div>
+      <div class="acts" id="acts"></div>
+      <div class="panel">
+        <span class="label">키 위치</span>
+        <div class="mk" id="mk"></div>
+      </div>
+      <div class="panel" id="opp">
+        <div class="opp-head"><b id="o-name">상대</b><span class="opp-state" id="o-state">대기</span></div>
+        <div class="obar"><span id="o-prog" style="width:0%"></span></div>
+        <div class="obar ogauge"><span id="o-gauge" style="width:0%"></span></div>
+        <div class="ostats">
+          <div>진행<b id="o-pct">0%</b></div>
+          <div>게이지<b id="o-g">0%</b></div>
+          <div>지뢰 밟음<b id="o-steps">0</b></div>
+        </div>
+      </div>
+      <div class="panel">
+        <span class="label">기록</span>
+        <ul class="log" id="log"></ul>
+      </div>
+      <details class="panel">
+        <summary>규칙</summary>
+        <ul class="rules">
+          <li><b>키</b>: 좌클릭·우클릭은 지정 키 1개, 화음은 지정 키 2개. 시행마다 키가 바뀌고 두 사람은 같은 순서의 키를 받습니다. 틀리면 그 동작은 올바른 입력 3회 동안 잠깁니다.</li>
+          <li><b>판</b>: 두 사람이 같은 16×16(지뢰 40) 판을 받고, 판은 끝까지 그대로입니다. 시작 칸은 미리 열려 있습니다.</li>
+          <li><b>게이지</b>: 안전한 칸을 처음 열 때마다 2.5%. 덮였다가 다시 연 칸은 충전되지 않습니다. 상한 300%.</li>
+          <li><b>공격</b>: 게이지 100% 이상에서 화음으로 칸 2개 이상을 직접 열면 자동 발동. 위력 n = 화음 중심 숫자, m = 화음이 직접 연 칸 수. 공격 후 4초간 공격 불가.</li>
+          <li><b>방어</b>: 내 판에 파란 표시가 뜨면 4초 안에 키 없이 좌클릭해서 10×10 퍼즐을 열고, 남은 안전한 칸 하나를 누르면 방어 성공. 게이지 +100% + 남은 초 × 20%. 퍼즐을 여는 동안 내 시간은 절반 속도로 흐릅니다.</li>
+          <li><b>피격</b>: 주변 8칸이 모두 해결된 열린 칸 하나를 골라 n×n을 덮고 깃발도 지웁니다. 짝수 크기면 피격 칸이 왼쪽 위 사분면의 오른쪽 아래 칸이 됩니다. 이어서 m번의 시행 동안 좌·우클릭은 키 2개, 화음은 키 2개 + 왼쪽 Shift가 필요하고, 끝나면 게이지 +50%.</li>
+          <li><b>지뢰 밟음</b>: 게임은 계속되고, 밟은 칸 중심 7×7을 덮고 깃발을 지웁니다.</li>
+          <li><b>점수</b>(낮을수록 승리): 내 시간 × 선착 0.7 × 지뢰 밟음 1회당 1.1 × 깃발 없는 지뢰 1개당 0.99. 늦게 끝내는 쪽이 이길 수 없게 확정되면 바로 종료.</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="ov-count" hidden><div class="count" id="count">3</div></div>
+<div class="ovl def" id="ov-def" hidden>
+  <div class="dlg">
+    <h2>방어! 남은 안전한 칸 하나를 찾으세요</h2>
+    <div class="tbar"><span id="def-bar"></span></div>
+    <div class="pz" id="pz"></div>
+    <p>키 없이 좌클릭. 지뢰를 누르면 방어 실패.</p>
+  </div>
+</div>
+<div class="ovl res" id="ov-res" hidden>
+  <div class="dlg">
+    <h2 id="res-title">결과</h2>
+    <div class="tbl"><table><thead><tr><th>플레이어</th><th>시간</th><th>선착</th><th>지뢰 밟음</th><th>깃발 없는 지뢰</th><th>점수</th></tr></thead><tbody id="res-body"></tbody></table></div>
+    <div class="row"><button class="btn" id="res-close">판 보기</button><button class="btn primary" id="res-again">다시 하기</button></div>
+  </div>
+</div>
+
+<script>
+// ===================== shared engine (seeded, deterministic) =====================
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function mix(a, b) { let h = (a ^ Math.imul(b + 0x9E3779B1, 0x85EBCA6B)) >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x7FEB352D); h ^= h >>> 15; return h >>> 0; }
+function neighbors(w, h) {
+  const NB = new Array(w * h);
+  for (let i = 0; i < w * h; i++) { const x = i % w, y = (i / w) | 0, r = [];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue;
+      const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < w && ny < h) r.push(ny * w + nx); }
+    NB[i] = r; }
+  return NB;
+}
+// no-guess board: rejection sampling + logic solver. Deterministic for a given rng.
+function makeNoGuess(w, h, m, first, rng, maxTries = 4000) {
+  const N = w * h, NB = neighbors(w, h);
+  const ban = new Set([first, ...NB[first]]);
+  const cand = []; for (let i = 0; i < N; i++) if (!ban.has(i)) cand.push(i);
+  const mines = new Uint8Array(N), count = new Uint8Array(N);
+  for (let t = 1; t <= maxTries; t++) {
+    mines.fill(0);
+    for (let k = 0; k < m; k++) { const j = k + Math.floor(rng() * (cand.length - k)); const tmp = cand[k]; cand[k] = cand[j]; cand[j] = tmp; mines[cand[k]] = 1; }
+    for (let i = 0; i < N; i++) { let c = 0; for (const j of NB[i]) c += mines[j]; count[i] = c; }
+    if (solve(w, h, m, first, mines, count, NB)) return Array.from(mines, Boolean);
+  }
+  return null;
+}
+function solve(w, h, m, first, mines, count, NB) {
+  const N = w * h, st = new Uint8Array(N);
+  let revealed = 0, knownMines = 0; const queue = [];
+  const open = i => { if (st[i]) return; queue.push(i);
+    while (queue.length) { const k = queue.pop(); if (st[k]) continue; st[k] = 1; revealed++; if (count[k] === 0) for (const j of NB[k]) if (!st[j]) queue.push(j); } };
+  const mark = i => { if (!st[i]) { st[i] = 2; knownMines++; } };
+  open(first);
+  const target = N - m;
+  while (revealed < target) {
+    let progress = false; const cons = [];
+    for (let i = 0; i < N; i++) {
+      if (st[i] !== 1 || count[i] === 0) continue;
+      let need = count[i]; const un = [];
+      for (const j of NB[i]) { if (st[j] === 2) need--; else if (st[j] === 0) un.push(j); }
+      if (!un.length) continue;
+      if (need === 0) { un.forEach(open); progress = true; }
+      else if (need === un.length) { un.forEach(mark); progress = true; }
+      else cons.push({ cells: un, need });
+    }
+    if (progress) continue;
+    const byCell = new Map();
+    cons.forEach((c, ci) => c.cells.forEach(x => { let a = byCell.get(x); if (!a) byCell.set(x, a = []); a.push(ci); }));
+    for (let a = 0; a < cons.length && !progress; a++) {
+      const A = cons[a], seen = new Set();
+      for (const x of A.cells) for (const b of byCell.get(x)) {
+        if (b === a || seen.has(b)) continue; seen.add(b);
+        const B = cons[b]; if (A.cells.length > B.cells.length) continue;
+        const Bs = new Set(B.cells); if (!A.cells.every(c => Bs.has(c))) continue;
+        const rest = B.cells.filter(c => !A.cells.includes(c)), r = B.need - A.need;
+        if (!rest.length) continue;
+        if (r === 0) { rest.forEach(open); progress = true; break; }
+        if (r === rest.length) { rest.forEach(mark); progress = true; break; }
+      }
+    }
+    if (progress) continue;
+    const left = m - knownMines;
+    let unknownTotal = 0; for (let i = 0; i < N; i++) if (st[i] === 0) unknownTotal++;
+    if (left === 0) { for (let i = 0; i < N; i++) if (st[i] === 0) open(i); continue; }
+    if (left === unknownTotal) { for (let i = 0; i < N; i++) if (st[i] === 0) mark(i); continue; }
+    const frontier = [...byCell.keys()], comp = new Map(); let nc = 0;
+    for (const s of frontier) { if (comp.has(s)) continue; const stack = [s]; comp.set(s, nc);
+      while (stack.length) { const x = stack.pop(); for (const ci of byCell.get(x)) for (const y of cons[ci].cells) if (!comp.has(y)) { comp.set(y, nc); stack.push(y); } }
+      nc++; }
+    const comps = Array.from({ length: nc }, () => ({ cells: [], cons: new Set() }));
+    for (const [x, c] of comp) comps[c].cells.push(x);
+    cons.forEach((c, ci) => comps[comp.get(c.cells[0])].cons.add(ci));
+    const interior = unknownTotal - frontier.length, results = []; let aborted = false;
+    for (const C of comps) {
+      const r = enumerate(C, cons, left);
+      if (!r) { aborted = true; results.push(null); continue; }
+      results.push(r);
+      for (let k = 0; k < C.cells.length; k++) {
+        if (r.mineIn[k] === 0) { open(C.cells[k]); progress = true; }
+        else if (r.mineIn[k] === r.total) { mark(C.cells[k]); progress = true; }
+      }
+    }
+    if (progress) continue;
+    if (!aborted && nc <= 4) {
+      let dist = new Map([[0, 1]]);
+      for (const r of results) { const nd = new Map();
+        for (const [a, ca] of dist) for (const [b, cb] of r.byCount) { const s = a + b; if (s > left) continue; nd.set(s, (nd.get(s) || 0) + ca * cb); }
+        dist = nd; }
+      const feasible = [...dist.keys()].filter(s => left - s >= 0 && left - s <= interior);
+      if (!feasible.length) return false;
+      if (interior > 0) {
+        if (feasible.every(s => left - s === 0)) { for (let i = 0; i < N; i++) if (st[i] === 0 && !comp.has(i)) open(i); progress = true; }
+        else if (feasible.every(s => left - s === interior)) { for (let i = 0; i < N; i++) if (st[i] === 0 && !comp.has(i)) mark(i); progress = true; }
+      }
+      if (progress) continue;
+      for (let ci = 0; ci < results.length && !progress; ci++) {
+        const r = results[ci];
+        const otherOk = cnt => { let d = new Set([0]);
+          results.forEach((o, oi) => { if (oi === ci) return; const nd = new Set(); for (const a of d) for (const b of o.byCount.keys()) nd.add(a + b); d = nd; });
+          for (const a of d) { const s = a + cnt; if (left - s >= 0 && left - s <= interior) return true; } return false; };
+        const okCounts = [...r.byCount.keys()].filter(otherOk);
+        if (okCounts.length === r.byCount.size) continue;
+        const C = comps[ci];
+        for (let k = 0; k < C.cells.length; k++) {
+          let anyMine = false, anySafe = false;
+          for (const c of okCounts) { const mm = r.mineByCount.get(c)[k], tot = r.byCount.get(c); if (mm > 0) anyMine = true; if (mm < tot) anySafe = true; }
+          if (!anyMine) { open(C.cells[k]); progress = true; } else if (!anySafe) { mark(C.cells[k]); progress = true; }
+        }
+      }
+    }
+    if (!progress) return false;
+  }
+  return true;
+}
+function enumerate(C, cons, maxMines) {
+  const cells = C.cells, n = cells.length;
+  if (n > 40) return null;
+  const idx = new Map(cells.map((c, k) => [c, k]));
+  const cl = [...C.cons].map(ci => ({ v: cons[ci].cells.map(c => idx.get(c)), need: cons[ci].need }));
+  const cellCons = Array.from({ length: n }, () => []);
+  cl.forEach((c, k) => c.v.forEach(v => cellCons[v].push(k)));
+  const order = [], seen = new Uint8Array(n), q = [0]; seen[0] = 1;
+  while (q.length) { const v = q.shift(); order.push(v); for (const k of cellCons[v]) for (const u of cl[k].v) if (!seen[u]) { seen[u] = 1; q.push(u); } }
+  const val = new Int8Array(n).fill(-1), assigned = new Int16Array(cl.length), mineCnt = new Int16Array(cl.length), size = cl.map(c => c.v.length);
+  const mineIn = new Float64Array(n); let total = 0; const byCount = new Map(), mineByCount = new Map(); let nodes = 0, cur = 0;
+  const ok = v => { for (const k of cellCons[v]) { const mc = mineCnt[k], as = assigned[k]; if (mc > cl[k].need || mc + (size[k] - as) < cl[k].need) return false; } return true; };
+  const rec = d => {
+    if (++nodes > 200000) throw 0;
+    if (d === n) { total++; for (let k = 0; k < n; k++) if (val[k]) mineIn[k]++;
+      byCount.set(cur, (byCount.get(cur) || 0) + 1);
+      let a = mineByCount.get(cur); if (!a) mineByCount.set(cur, a = new Float64Array(n));
+      for (let k = 0; k < n; k++) if (val[k]) a[k]++; return; }
+    const v = order[d];
+    for (const x of [0, 1]) {
+      if (x && cur >= maxMines) continue;
+      val[v] = x; cur += x; for (const k of cellCons[v]) { assigned[k]++; mineCnt[k] += x; }
+      if (ok(v)) rec(d + 1);
+      for (const k of cellCons[v]) { assigned[k]--; mineCnt[k] -= x; } cur -= x; val[v] = -1;
+    }
+  };
+  try { rec(0); } catch (e) { return null; }
+  if (!total) return null;
+  return { mineIn, total, byCount, mineByCount };
+}
+// The match board: same seed -> same start cell and same mines on both clients
+function makeMatchBoard(seed, w, h, m) {
+  const rng = mulberry32(seed);
+  for (;;) {
+    const sx = 1 + Math.floor(rng() * (w - 2)), sy = 1 + Math.floor(rng() * (h - 2)), start = sy * w + sx;
+    const mines = makeNoGuess(w, h, m, start, rng);
+    if (mines) return { mines, start };
+  }
+}
+
+// ===================== config =====================
+const CFG = {
+  w: 16, h: 16, m: 40,
+  stepCover: 7,            // mine step covers 7x7 (intermediate); 9x9 on expert
+  gaugePerCell: 2.5, gaugeCap: 300,
+  defenseMs: 4000, defBase: 100, defPerSec: 20,
+  attackLockMs: 4000, debuffEndGauge: 50,
+  firstMul: 0.7, stepMul: 1.1, nfMul: 0.99,
+  slowPuzzle: 0.5,
+};
+const KEYS = ['KeyQ','KeyW','KeyE','KeyR','KeyA','KeyS','KeyD','KeyF','KeyZ','KeyX','KeyC','KeyV'];
+const KEY_SET = new Set(KEYS);
+const LABEL = { ShiftLeft: 'LShift' }; KEYS.forEach(k => LABEL[k] = k.slice(3));
+const ANAME = { left: '좌클릭', right: '우클릭', chord: '화음' };
+const score = (t, first, steps, nf) => t * (first ? CFG.firstMul : 1) * Math.pow(CFG.stepMul, steps) * Math.pow(CFG.nfMul, nf);
+
+// ===================== page state =====================
+const $ = id => document.getElementById(id);
+const boardEl = $('board');
+const FLAG = '<svg viewBox="0 0 16 16"><path d="M5 2v12M3 14h6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.8 2.4L12.6 5.2 5.8 8z" fill="var(--right)"/></svg>';
+const MINE = '<svg viewBox="0 0 16 16"><path d="M8 1.5v13M1.5 8h13M3.6 3.6l8.8 8.8M12.4 3.6l-8.8 8.8" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="4.2" fill="currentColor"/></svg>';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
+
+let G = null;          // current match
+let mode = 'bot', botLv = 'normal', rotated = !!store.get('ms1v1-rot');
+let net = null;        // opponent adapter (bot or socket)
+const held = new Set();
+let cellEls = [];
+
+function newMatch(seed, myName, oppName) {
+  const { w, h, m } = CFG;
+  const NB = neighbors(w, h);
+  const { mines, start } = makeMatchBoard(seed, w, h, m);
+  const count = mines.map((_, i) => NB[i].filter(j => mines[j]).length);
+  G = { seed, w, h, m, NB, mines, count, start,
+    open: new Array(w * h).fill(false), flag: new Array(w * h).fill(false), ever: new Array(w * h).fill(false),
+    safeTotal: w * h - m, openCount: 0,
+    phase: 'count', time: 0, steps: 0, attempt: 0, req: null,
+    lock: { left: 0, right: 0, chord: 0 }, debuffs: [],
+    gauge: 0, attackLockUntil: 0,
+    marks: [], defense: null, finished: false, myScore: null, first: false,
+    opp: { name: oppName, pct: 0, gauge: 0, steps: 0, finished: false, score: null },
+    me: myName, log: [], lastSent: 0 };
+  reveal(start, true);
+  roll();
+  buildBoard();
+  renderAll();
+  log(`판 준비 완료 · 시드 ${seed.toString(16)}`);
+}
+
+// ---------- keys (same sequence for both players: seed + attempt index) ----------
+function roll() {
+  const r = mulberry32(mix(G.seed, G.attempt + 1));
+  const pair = () => { const a = Math.floor(r() * 12); let b = Math.floor(r() * 11); if (b >= a) b++; return [KEYS[a], KEYS[b]]; };
+  G.req = { L: pair(), R: pair(), C: pair() };
+}
+const debuffOn = () => G && G.debuffs.length > 0;
+function needOf(a) {
+  if (a === 'chord') return debuffOn() ? [...G.req.C, 'ShiftLeft'] : [...G.req.C];
+  const p = a === 'left' ? G.req.L : G.req.R;
+  return debuffOn() ? p : [p[0]];
+}
+const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+const gotOf = snap => [...snap].filter(c => KEY_SET.has(c) || c === 'ShiftLeft');
+
+// ---------- board ops ----------
+function addGauge(v) { G.gauge = Math.min(CFG.gaugeCap, G.gauge + v); }
+function reveal(i, silent) {
+  if (G.open[i] || G.flag[i]) return { opened: 0, mine: false };
+  if (G.mines[i]) return { opened: 0, mine: true };
+  const stack = [i]; let n = 0, fresh = 0;
+  while (stack.length) { const k = stack.pop(); if (G.open[k] || G.flag[k] || G.mines[k]) continue;
+    G.open[k] = true; G.openCount++; n++;
+    if (!G.ever[k]) { G.ever[k] = true; fresh++; }
+    if (G.count[k] === 0) for (const j of G.NB[k]) if (!G.open[j] && !G.flag[j]) stack.push(j); }
+  if (!silent && fresh) addGauge(fresh * CFG.gaugePerCell);
+  return { opened: n, mine: false };
+}
+function coverSquare(cx, cy, n) {
+  const x0 = cx - Math.floor((n - 1) / 2), y0 = cy - Math.floor((n - 1) / 2), hitCells = [];
+  for (let y = y0; y < y0 + n; y++) for (let x = x0; x < x0 + n; x++) {
+    if (x < 0 || y < 0 || x >= G.w || y >= G.h) continue;
+    const i = y * G.w + x;
+    if (G.open[i]) { G.open[i] = false; G.openCount--; }
+    G.flag[i] = false; hitCells.push(i);
+  }
+  return hitCells;
+}
+function mineStep(i) {
+  G.steps++;
+  const cells = coverSquare(i % G.w, (i / G.w) | 0, CFG.stepCover);
+  flashCover(cells);
+  log(`지뢰 밟음 · ${CFG.stepCover}×${CFG.stepCover} 덮임`, 'hit');
+  setStatus(`지뢰를 밟았습니다. 주변 ${CFG.stepCover}×${CFG.stepCover}이 덮이고 깃발이 지워졌습니다. (점수 ×${CFG.stepMul})`, 'bad');
+}
+const resolved = i => G.open[i] && G.NB[i].every(j => G.open[j] || G.mines[j]);
+
+// ---------- actions ----------
+function attempt(action, i, snap) {
+  if (!G || G.phase !== 'play' || G.finished) return;
+  const got = gotOf(snap);
+  if (action !== 'chord' && sameSet(got, needOf('chord'))) { setStatus(`화음 준비 중이라 ${ANAME[action]}을 무시했습니다.`); return; }
+  G.attempt++;
+  const need = needOf(action), ok = sameSet(got, need);
+  let kind;
+  if (!ok) {
+    G.lock[action] = 3; kind = 'bad';
+    setStatus(`${ANAME[action]} 미스 (필요: ${need.map(c => LABEL[c]).join('+')}). 올바른 입력 3회 후 풀립니다.`, 'bad');
+  } else if (G.lock[action] > 0) {
+    G.lock[action]--; kind = 'mid';
+    setStatus(G.lock[action] ? `${ANAME[action]} 잠김 · ${G.lock[action]}회 남음` : `${ANAME[action]} 잠금 해제`);
+  } else {
+    kind = 'ok'; execute(action, i);
+  }
+  consumeDebuff();
+  flash(action, kind);
+  roll();
+  checkFinish();
+  renderAll();
+}
+function consumeDebuff() {
+  if (!G.debuffs.length) return;
+  G.debuffs[0]--;
+  if (G.debuffs[0] <= 0) { G.debuffs.shift(); addGauge(CFG.debuffEndGauge); log(`디버프 종료 · 게이지 +${CFG.debuffEndGauge}%`, 'gain'); }
+}
+function execute(action, i) {
+  if (action === 'left') {
+    if (G.open[i] || G.flag[i]) { setStatus('좌클릭 성공 · 변화 없음'); return; }
+    const r = reveal(i);
+    if (r.mine) mineStep(i); else setStatus(`좌클릭 성공 · ${r.opened}칸 열림`, 'good');
+  } else if (action === 'right') {
+    if (G.open[i]) { setStatus('우클릭 성공 · 변화 없음'); return; }
+    G.flag[i] = !G.flag[i]; setStatus(G.flag[i] ? '깃발' : '깃발 해제');
+  } else {
+    if (!G.open[i] || G.count[i] === 0) { setStatus('화음 성공 · 변화 없음'); return; }
+    const around = G.NB[i];
+    if (around.filter(j => G.flag[j]).length !== G.count[i]) { setStatus('화음 성공 · 깃발 수가 숫자와 다릅니다'); return; }
+    const targets = around.filter(j => !G.open[j] && !G.flag[j]);
+    const boom = targets.find(j => G.mines[j]);
+    if (boom !== undefined) { mineStep(boom); return; }
+    const direct = targets.length; targets.forEach(j => reveal(j));
+    if (direct === 0) { setStatus('화음 성공 · 변화 없음'); return; }
+    const n = G.count[i], now = performance.now();
+    if (direct >= 2 && G.gauge >= 100 && now >= G.attackLockUntil) {
+      G.gauge -= 100; G.attackLockUntil = now + CFG.attackLockMs;
+      const id = net.attack(n, direct);
+      log(`공격 #${id} 발사 · 덮기 ${n}×${n}, 디버프 ${direct}회`, 'atk');
+      setStatus(`공격! 덮기 ${n}×${n}, 상대 디버프 ${direct}회`, 'good');
+    } else {
+      const why = direct < 2 ? '' : G.gauge < 100 ? '' : ' (공격 대기 시간 중)';
+      setStatus(`화음 성공 · ${direct}칸 열림${why}`, 'good');
+    }
+  }
+}
+function checkFinish() {
+  if (G.finished || G.openCount !== G.safeTotal) return;
+  G.finished = true; G.phase = 'done-me';
+  const nf = G.mines.filter((mn, i) => mn && !G.flag[i]).length;
+  G.final = { time: G.time, steps: G.steps, nf };
+  net.finish(G.final);
+  setStatus('클리어! 상대를 기다리는 중...', 'good');
+  log(`클리어 · ${(G.time / 1000).toFixed(1)}초`, 'gain');
+}
+
+// ---------- incoming attack / defense ----------
+function incoming(id, n, m) {
+  if (!G || G.finished) { net.defend(id, false, 0); return; }
+  const cell = Math.floor(Math.random() * G.w * G.h);
+  G.marks.push({ id, n, m, cell, t0: performance.now(), opened: false });
+  log(`공격 받음 #${id} · ${n}×${n}, 디버프 ${m}회 · 파란 칸을 누르세요`, 'def');
+  setStatus('공격이 들어왔습니다! 파란 칸을 좌클릭해서 방어 퍼즐을 여세요 (4초)', 'mark');
+  renderAll();
+}
+function openDefense(mk) {
+  mk.opened = true;
+  G.defense = { mk, pz: makePuzzle() };
+  renderPuzzle();
+  $('ov-def').hidden = false;
+}
+function endDefense(mk, ok) {
+  const remain = Math.max(0, CFG.defenseMs - (performance.now() - mk.t0));
+  G.marks = G.marks.filter(x => x !== mk);
+  if (G.defense && G.defense.mk === mk) { G.defense = null; $('ov-def').hidden = true; }
+  if (ok) {
+    const gain = CFG.defBase + CFG.defPerSec * remain / 1000;
+    addGauge(gain);
+    log(`방어 성공 #${mk.id} · 게이지 +${gain.toFixed(0)}% (남은 ${(remain / 1000).toFixed(1)}초)`, 'gain');
+    setStatus(`방어 성공! 게이지 +${gain.toFixed(0)}%`, 'good');
+  } else {
+    applyHit(mk.n, mk.m);
+  }
+  net.defend(mk.id, ok, remain);
+  renderAll();
+}
+function applyHit(n, m) {
+  let cand = []; for (let i = 0; i < G.w * G.h; i++) if (resolved(i)) cand.push(i);
+  if (!cand.length) for (let i = 0; i < G.w * G.h; i++) if (G.open[i]) cand.push(i);
+  if (cand.length) {
+    const c = cand[Math.floor(Math.random() * cand.length)];
+    flashCover(coverSquare(c % G.w, (c / G.w) | 0, n));
+  }
+  G.debuffs.push(m);
+  log(`피격 · ${n}×${n} 덮임, 디버프 ${m}회`, 'hit');
+  setStatus(`피격! ${n}×${n}이 덮였고, 다음 ${m}회 시행은 좌·우클릭 키 2개, 화음 키 2개 + LShift가 필요합니다.`, 'bad');
+}
+// 10x10 puzzle: every safe cell open except one, which must be the only consistent choice
+function makePuzzle() {
+  const w = 10, h = 10, N = 100, NB = neighbors(w, h);
+  for (;;) {
+    const mines = new Array(N).fill(false), mc = 14 + Math.floor(Math.random() * 7);
+    const idx = [...Array(N).keys()];
+    for (let k = 0; k < mc; k++) { const j = k + Math.floor(Math.random() * (N - k)); [idx[k], idx[j]] = [idx[j], idx[k]]; mines[idx[k]] = true; }
+    const count = mines.map((_, i) => NB[i].filter(j => mines[j]).length);
+    const safe = idx.filter(i => !mines[i]);
+    const s = safe[Math.floor(Math.random() * safe.length)];
+    if (!NB[s].some(j => !mines[j])) continue;
+    const revealedNb = i => new Set(NB[i].filter(j => !mines[j] && j !== s));
+    const sN = revealedNb(s);
+    const unique = idx.filter(i => mines[i]).every(hc => { const hN = revealedNb(hc);
+      for (const r of sN) if (!hN.has(r)) return true; for (const r of hN) if (!sN.has(r)) return true; return false; });
+    if (unique) return { w, h, mines, count, s };
+  }
+}
+function renderPuzzle() {
+  const P = G.defense.pz, el = $('pz'); let html = '';
+  for (let i = 0; i < 100; i++) {
+    const hidden = P.mines[i] || i === P.s;
+    html += hidden ? `<div class="cell hidden" data-p="${i}"></div>` : `<div class="cell open${P.count[i] ? ' n' + P.count[i] : ''}">${P.count[i] || ''}</div>`;
+  }
+  el.innerHTML = html;
+}
+$('pz').addEventListener('click', e => {
+  const c = e.target.closest('[data-p]'); if (!c || !G || !G.defense) return;
+  const i = +c.dataset.p, mk = G.defense.mk;
+  if (i === G.defense.pz.s) endDefense(mk, true);
+  else { log('방어 퍼즐에서 지뢰를 눌렀습니다', 'hit'); endDefense(mk, false); }
+});
+$('pz').addEventListener('contextmenu', e => e.preventDefault());
+
+// ---------- rendering ----------
+function dispDims() { return rotated ? { cols: G.h, rows: G.w } : { cols: G.w, rows: G.h }; }
+function buildBoard() {
+  const { cols, rows } = dispDims();
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, var(--cs))`;
+  boardEl.innerHTML = ''; cellEls = new Array(G.w * G.h);
+  for (let dy = 0; dy < rows; dy++) for (let dx = 0; dx < cols; dx++) {
+    // clockwise: display (dx, dy) shows internal (x = dy, y = h-1-dx)
+    const i = rotated ? (G.h - 1 - dx) * G.w + dy : dy * G.w + dx;
+    const c = document.createElement('div'); c.dataset.i = i; boardEl.appendChild(c); cellEls[i] = c;
+  }
+  fitBoard();
+}
+function fitBoard() {
+  if (!G) return;
+  const { cols } = dispDims(), avail = boardEl.parentElement.clientWidth;
+  const byH = Math.floor((window.innerHeight - 230) / dispDims().rows) - 2;
+  const cs = Math.max(16, Math.min(34, Math.floor((avail - (cols - 1) * 2) / cols), Math.max(22, byH)));
+  boardEl.style.setProperty('--cs', cs + 'px');
+}
+new ResizeObserver(fitBoard).observe(boardEl.parentElement);
+function flashCover(cells) { G.coverFlash = new Set(cells); setTimeout(() => { if (G) G.coverFlash = null; }, 650); }
+
+function renderBoard() {
+  const markCells = new Set(G.marks.filter(m => !m.opened).map(m => m.cell));
+  const showMines = G.phase === 'over';
+  for (let i = 0; i < cellEls.length; i++) {
+    const c = cellEls[i]; let cls = 'cell', html = '';
+    if (G.flag[i]) { cls += ' flag'; html = FLAG; }
+    else if (G.open[i]) { const n = G.count[i]; cls += ' open' + (n ? ' n' + n : ''); html = n ? String(n) : ''; }
+    else if (showMines && G.mines[i]) { cls += ' open'; html = MINE; }
+    else cls += ' hidden';
+    if (markCells.has(i)) cls += ' mark';
+    if (G.coverFlash && G.coverFlash.has(i)) cls += ' covered';
+    if (c.className !== cls) c.className = cls;
+    if (c.innerHTML !== html) c.innerHTML = html;
+  }
+}
+function renderStats() {
+  $('s-time').textContent = (G.time / 1000).toFixed(1);
+  $('s-left').textContent = G.safeTotal - G.openCount;
+  $('s-flags').textContent = G.flag.filter(Boolean).length;
+  $('s-steps').textContent = G.steps;
+  const nf = G.mines.filter((mn, i) => mn && !G.flag[i]).length;
+  $('s-score').textContent = (score(G.time, false, G.steps, nf) / 1000).toFixed(1);
+  const slow = !!G.defense; $('s-time').parentElement.classList.toggle('slow', slow);
+  const gv = G.gauge;
+  $('g-val').textContent = gv.toFixed(1).replace(/\.0$/, '') + '%';
+  $('g-fill').style.width = (gv / CFG.gaugeCap * 100) + '%';
+  const lockLeft = G.attackLockUntil - performance.now();
+  $('gauge').classList.toggle('ready', gv >= 100 && lockLeft <= 0);
+  const note = $('g-note');
+  note.classList.toggle('on', lockLeft > 0);
+  note.textContent = lockLeft > 0 ? `공격 불가 ${(lockLeft / 1000).toFixed(1)}초` : gv >= 100 ? '준비 완료 · 화음으로 칸 2개 이상을 열면 공격' : '100% 이상에서 화음으로 칸 2개 이상을 열면 공격이 나갑니다.';
+}
+const capHTML = c => `<span class="cap${c === 'ShiftLeft' ? ' sh' : ''}" data-code="${c}">${LABEL[c]}</span>`;
+function renderActs() {
+  const box = $('acts');
+  if (!box.children.length) box.innerHTML = ['left', 'right', 'chord'].map(a => `<div class="act" data-a="${a}"><div class="name">${ANAME[a]}<span>${{ left: '열기', right: '깃발', chord: '좌+우 · 공격' }[a]}</span></div><div class="keys"></div><div class="sub"></div></div>`).join('');
+  ['left', 'right', 'chord'].forEach(a => {
+    const el = box.querySelector(`[data-a="${a}"]`), n = G.lock[a];
+    el.querySelector('.keys').innerHTML = needOf(a).map(capHTML).join('<em>+</em>');
+    el.classList.toggle('locked', n > 0);
+    const sub = el.querySelector('.sub');
+    if (n > 0) { sub.className = 'sub lock'; sub.textContent = `잠김 · ${n}회 남음`; }
+    else if (debuffOn()) { sub.className = 'sub debuff'; sub.textContent = `디버프 · ${G.debuffs.reduce((s, x) => s + x, 0)}회 남음`; }
+    else { sub.className = 'sub'; sub.textContent = '사용 가능'; }
+  });
+  renderHeld();
+}
+const MK_ROWS = [[['Tab', 6, 1], 'KeyQ', 'KeyW', 'KeyE', 'KeyR'], [['Caps', 7, 1], 'KeyA', 'KeyS', 'KeyD', 'KeyF'], [['ShiftLeft', 9, 0], 'KeyZ', 'KeyX', 'KeyC', 'KeyV']];
+function renderMk() {
+  const el = $('mk');
+  if (!el.children.length) {
+    let html = '';
+    MK_ROWS.forEach((row, r) => { let col = 1;
+      row.forEach(k => { const [code, span, off] = Array.isArray(k) ? k : [k, 4, 0];
+        html += `<div class="${off ? 'off' : ''}" data-code="${code}" style="grid-row:${r + 1};grid-column:${col} / span ${span}">${code === 'ShiftLeft' ? 'LShift' : off ? code : LABEL[code]}</div>`; col += span; }); });
+    el.innerHTML = html;
+  }
+  const roles = {};
+  ['left', 'right', 'chord'].forEach(a => needOf(a).forEach(c => { if (!roles[c]) roles[c] = a; }));
+  el.querySelectorAll('[data-code]').forEach(k => { const r = roles[k.dataset.code]; if (r) k.dataset.role = r; else delete k.dataset.role; });
+}
+function renderHeld() {
+  document.querySelectorAll('#acts .cap[data-code]').forEach(c => c.classList.toggle('on', held.has(c.dataset.code)));
+  document.querySelectorAll('#mk [data-code]').forEach(c => c.classList.toggle('down', held.has(c.dataset.code)));
+}
+function renderOpp() {
+  const o = G.opp;
+  $('o-name').textContent = o.name;
+  $('o-state').textContent = o.finished ? `완료 · 점수 ${(o.score / 1000).toFixed(1)}` : G.phase === 'play' ? '진행 중' : '대기';
+  $('o-prog').style.width = o.pct + '%'; $('o-pct').textContent = Math.round(o.pct) + '%';
+  $('o-gauge').style.width = (o.gauge / CFG.gaugeCap * 100) + '%'; $('o-g').textContent = Math.round(o.gauge) + '%';
+  $('o-steps').textContent = o.steps;
+}
+function renderLog() {
+  $('log').innerHTML = G.log.slice(0, 40).map(e => `<li class="${e.k || ''}"><time>${e.t}</time><span class="${e.k || ''}">${esc(e.msg)}</span></li>`).join('');
+}
+function renderAll() { if (!G) return; renderBoard(); renderStats(); renderActs(); renderMk(); renderOpp(); renderLog(); }
+function log(msg, k) { if (!G) return; G.log.unshift({ t: (G.time / 1000).toFixed(1), msg, k }); renderLog(); }
+function setStatus(t, kind) { const s = $('status'); s.textContent = t; s.className = 'status' + (kind ? ' ' + kind : ''); }
+const flashT = {};
+function flash(a, kind) {
+  const el = $('acts').querySelector(`[data-a="${a}"]`); if (!el) return;
+  el.classList.remove('ok', 'bad'); if (kind === 'mid') return;
+  el.classList.add(kind === 'ok' ? 'ok' : 'bad');
+  clearTimeout(flashT[a]); flashT[a] = setTimeout(() => el.classList.remove('ok', 'bad'), 400);
+}
+
+// ---------- main loop ----------
+let lastT = performance.now();
+function frame(now) {
+  const dt = Math.min(100, now - lastT); lastT = now;
+  if (G && G.phase === 'play' && !G.finished) {
+    G.time += dt * (G.defense ? CFG.slowPuzzle : 1);
+    for (const mk of [...G.marks]) {
+      const remain = CFG.defenseMs - (now - mk.t0);
+      if (remain <= 0) { if (G.defense && G.defense.mk === mk) log('방어 시간 초과', 'hit'); endDefense(mk, false); }
+    }
+    if (G.defense) $('def-bar').style.width = Math.max(0, (CFG.defenseMs - (now - G.defense.mk.t0)) / CFG.defenseMs * 100) + '%';
+    // opponent already finished: stop as soon as winning is impossible (best case = every mine left unflagged)
+    if (G.opp.finished && G.opp.score != null && score(G.time, false, G.steps, G.m) > G.opp.score) {
+      G.finished = true; G.phase = 'done-me'; G.final = { time: G.time, steps: G.steps, nf: G.mines.filter((mn, i) => mn && !G.flag[i]).length, conceded: true };
+      net.concede(G.final); setStatus('상대 점수를 넘어설 수 없어 경기가 끝났습니다.', 'bad');
+    }
+    if (now - G.lastSent > 250) { G.lastSent = now; net.progress({ pct: G.openCount / G.safeTotal * 100, gauge: G.gauge, steps: G.steps }); }
+    renderBoard(); renderStats();
+  }
+  if (net && net.tick) net.tick(now, dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+const isTyping = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+function codeOf(e) { if (e.key === 'Shift' && (e.location === 1 || e.location === 2)) return e.location === 2 ? 'ShiftRight' : 'ShiftLeft'; return e.code; }
+window.addEventListener('keydown', e => {
+  if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+  const code = codeOf(e);
+  if (KEY_SET.has(code) || code === 'ShiftLeft' || code === 'Tab' || code === 'Enter' || code === 'Space') e.preventDefault();
+  if (!held.has(code)) { held.add(code); renderHeld(); }
+});
+window.addEventListener('keyup', e => {
+  const code = codeOf(e); let ch = held.delete(code);
+  if (e.key === 'Shift' && !e.shiftKey) ch = held.delete('ShiftLeft') | held.delete('ShiftRight') || ch;
+  if (ch) renderHeld();
+});
+const clearHeld = () => { held.clear(); renderHeld(); };
+window.addEventListener('blur', clearHeld);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearHeld(); });
+
+let ms = null, pressed = [];
+const cellIndexAt = (x, y) => { const el = document.elementFromPoint(x, y); const c = el && el.closest && el.closest('#board .cell'); return c ? +c.dataset.i : -1; };
+function paintPress(i) {
+  pressed.forEach(c => c.classList.remove('press')); pressed = [];
+  if (!ms || i < 0 || !G || G.phase !== 'play') return;
+  const t = ms.chord ? [i, ...G.NB[i]] : ms.first === 'left' ? [i] : [];
+  t.forEach(k => { if (!G.open[k] && !G.flag[k]) { cellEls[k].classList.add('press'); pressed.push(cellEls[k]); } });
+}
+boardEl.addEventListener('contextmenu', e => e.preventDefault());
+boardEl.addEventListener('mousedown', e => {
+  if (e.button !== 0 && e.button !== 2) return;
+  e.preventDefault();
+  if (!G || G.phase !== 'play' || G.finished) return;
+  const b = e.button === 0 ? 'left' : 'right';
+  if (!e.shiftKey) { held.delete('ShiftLeft'); held.delete('ShiftRight'); }
+  if (!ms) ms = { L: false, R: false, chord: false, first: b, snap: null };
+  ms[b === 'left' ? 'L' : 'R'] = true; ms.snap = new Set(held);
+  if (ms.L && ms.R) ms.chord = true;
+  paintPress(cellIndexAt(e.clientX, e.clientY));
+});
+window.addEventListener('mousemove', e => { if (ms) paintPress(cellIndexAt(e.clientX, e.clientY)); });
+window.addEventListener('mouseup', e => {
+  if (!ms) return;
+  if (e.button === 0) ms.L = false; else if (e.button === 2) ms.R = false; else return;
+  if (ms.L || ms.R) return;
+  const done = ms; ms = null; paintPress(-1);
+  const i = cellIndexAt(e.clientX, e.clientY);
+  if (i < 0 || !G) return;
+  // defense marker: a plain left click, no keys needed
+  const mk = !done.chord && done.first === 'left' && G.marks.find(m => !m.opened && m.cell === i);
+  if (mk) { openDefense(mk); return; }
+  attempt(done.chord ? 'chord' : done.first, i, done.snap);
+});
+
+// ---------- match flow ----------
+function countdown(cb) {
+  const ov = $('ov-count'), el = $('count'); let n = 3;
+  ov.hidden = false; el.textContent = n;
+  const t = setInterval(() => { n--; if (n <= 0) { clearInterval(t); ov.hidden = true; cb(); } else el.textContent = n; }, 1000);
+}
+function beginPlay() { G.phase = 'play'; lastT = performance.now(); setStatus('시작! 지정 키를 누른 채로 클릭하세요.'); renderAll(); }
+function showResult(r) {
+  // r.rows: [{name, time, first, steps, nf, score, finished, me}], r.winner: name or null
+  if (G) { G.phase = 'over'; G.finished = true; G.defense = null; $('ov-def').hidden = true; G.marks = []; renderAll(); }
+  const meRow = r.rows.find(x => x.me);
+  const won = meRow && r.winnerIdx === r.rows.indexOf(meRow);
+  const t = $('res-title'); t.textContent = r.winnerIdx == null ? '무승부' : won ? '승리!' : '패배'; t.className = r.winnerIdx == null ? '' : won ? 'win' : 'lose';
+  $('res-body').innerHTML = r.rows.map(x => `<tr class="${x.me ? 'me' : ''}"><td>${esc(x.name)}</td><td>${x.finished ? (x.time / 1000).toFixed(1) : '미완료'}</td><td>${x.first ? '×0.7' : '–'}</td><td>${x.steps}</td><td>${x.finished ? x.nf : '–'}</td><td>${x.score != null ? (x.score / 1000).toFixed(1) : (x.note || '–')}</td></tr>`).join('');
+  $('ov-res').hidden = false;
+}
+$('res-close').addEventListener('click', () => { $('ov-res').hidden = true; });
+$('res-again').addEventListener('click', () => { $('ov-res').hidden = true; if (mode === 'bot') startBot(); else if (net && net.ready) net.ready(); });
+
+// ===================== bot opponent =====================
+const BOT = {
+  easy:   { rate: 1.2, defend: 0.25, stepPerSec: 0.012, attackPerSec: 0.25 },
+  normal: { rate: 1.8, defend: 0.45, stepPerSec: 0.008, attackPerSec: 0.4 },
+  hard:   { rate: 2.6, defend: 0.7,  stepPerSec: 0.005, attackPerSec: 0.6 },
+};
+function makeBotNet(lv) {
+  const P = BOT[lv];
+  const b = { opened: 0, ever: 0, gauge: 0, steps: 0, slowUntil: 0, debuffs: [], lockUntil: 0, finished: false, time: 0, nextId: 1, pending: new Map(), defenses: [], started: false };
+  const api = {
+    attack(n, m) { const id = b.nextId++;
+      // bot decides whether it defends; result arrives after its reaction time
+      const willDefend = Math.random() < P.defend, at = performance.now() + (willDefend ? 1200 + Math.random() * 2400 : CFG.defenseMs);
+      b.defenses.push({ id, n, m, at, ok: willDefend, remain: willDefend ? Math.max(0, CFG.defenseMs - (at - performance.now())) : 0 });
+      return id; },
+    defend(id, ok) { const p = b.pending.get(id); if (p) { b.pending.delete(id); if (ok) log(`봇의 공격 #${id}을 막았습니다`, 'def'); } },
+    progress() {}, ready: null,
+    finish(f) { G.final.first = !b.finished; G.myScore = score(f.time, G.final.first, f.steps, f.nf); if (b.finished) decide(); else log('봇이 아직 진행 중입니다. 봇이 따라잡을 수 없게 되면 끝납니다.'); },
+    concede(f) { decide(); },
+    tick(now, dt) {
+      if (!G || b.finished) return;
+      if (G.phase === 'done-me') { api.after(now, dt); if (b.finished) return; }
+      else if (G.phase !== 'play') return;
+      if (!b.init) { b.init = true; b.opened = b.ever = G.openCount; }
+      b.time += dt;
+      const total = G.safeTotal, slow = now < b.slowUntil ? 0.6 : 1;
+      const before = Math.floor(b.opened);
+      b.opened = Math.min(total, b.opened + P.rate * slow * dt / 1000 * (0.6 + Math.random() * 0.8));
+      const gained = Math.floor(b.opened) - before;
+      if (gained > 0 && b.ever < total) { const fresh = Math.min(gained, total - b.ever); b.ever += fresh; b.gauge = Math.min(CFG.gaugeCap, b.gauge + fresh * CFG.gaugePerCell); }
+      // debuff on bot: count its "attempts" roughly once per opened cell
+      if (gained > 0 && b.debuffs.length) { b.debuffs[0] -= gained; if (b.debuffs[0] <= 0) { b.debuffs.shift(); b.gauge = Math.min(CFG.gaugeCap, b.gauge + CFG.debuffEndGauge); } b.slowUntil = b.debuffs.length ? now + 800 : 0; }
+      if (Math.random() < P.stepPerSec * dt / 1000) { b.steps++; b.opened = Math.max(0, b.opened - 20); log('봇이 지뢰를 밟았습니다', 'gain'); }
+      if (G.phase === 'play' && b.gauge >= 100 && now >= b.lockUntil && Math.random() < P.attackPerSec * dt / 1000) {
+        b.gauge -= 100; b.lockUntil = now + CFG.attackLockMs;
+        const r = Math.random(), n = r < .45 ? 1 : r < .8 ? 2 : r < .95 ? 3 : 4, m = 2 + Math.floor(Math.random() * 4), id = b.nextId++;
+        b.pending.set(id, { n, m }); incoming(id, n, m);
+      }
+      for (const d of [...b.defenses]) if (now >= d.at) {
+        b.defenses = b.defenses.filter(x => x !== d);
+        if (d.ok) { const g = CFG.defBase + CFG.defPerSec * Math.max(0, d.remain) / 1000; b.gauge = Math.min(CFG.gaugeCap, b.gauge + g); log(`봇이 공격 #${d.id}을 막았습니다 · 봇 게이지 +${g.toFixed(0)}%`, 'hit'); }
+        else { b.opened = Math.max(0, b.opened - d.n * d.n * 0.7); b.debuffs.push(d.m); b.slowUntil = now + 800; log(`공격 #${d.id} 명중 · 봇 ${d.n}×${d.n} 덮임`, 'atk'); }
+      }
+      G.opp.pct = b.opened / total * 100; G.opp.gauge = b.gauge; G.opp.steps = b.steps;
+      if (b.opened >= total) {
+        b.finished = true; G.opp.finished = true;
+        b.final = { time: b.time, steps: b.steps, nf: Math.floor(Math.random() * (G.m + 1)) };
+        b.first = !G.finished;
+        G.opp.score = score(b.final.time, b.first, b.final.steps, b.final.nf);
+        log(`봇 클리어 · 점수 ${(G.opp.score / 1000).toFixed(1)}`, 'hit');
+        if (G.finished) decide();
+      }
+      if (Math.floor(now / 250) !== Math.floor((now - dt) / 250)) renderOpp();
+    },
+    // bot keeps playing after I finish; it gives up once it can no longer beat my score
+    after(now, dt) {
+      if (!G || G.phase !== 'done-me' || b.finished || G.myScore == null) return;
+      if (score(b.time, false, b.steps, G.m) > G.myScore) { b.finished = true; b.gaveUp = true; decide(); }
+    },
+  };
+  function decide() {
+    if (!G || G.phase === 'over') return;
+    const mine = G.final, meDone = !mine.conceded;
+    const meFirst = meDone && !!mine.first;
+    const meScore = meDone ? score(mine.time, meFirst, mine.steps, mine.nf) : null;
+    const botDone = !!b.final;
+    const botScore = botDone ? score(b.final.time, b.first, b.final.steps, b.final.nf) : null;
+    const rows = [
+      { name: G.me, me: true, finished: meDone, time: mine.time, first: meFirst, steps: mine.steps, nf: mine.nf, score: meScore, note: '포기' },
+      { name: G.opp.name, finished: botDone, time: botDone ? b.final.time : b.time, first: botDone && b.first, steps: b.steps, nf: botDone ? b.final.nf : 0, score: botScore, note: b.gaveUp ? '포기' : '미완료' },
+    ];
+    let w = null;
+    if (meScore != null && botScore != null) w = meScore < botScore ? 0 : botScore < meScore ? 1 : null;
+    else if (meScore != null) w = 0; else if (botScore != null) w = 1;
+    showResult({ rows, winnerIdx: w });
+  }
+  return api;
+}
+function startBot() {
+  net = makeBotNet(botLv);
+  newMatch((Math.random() * 2 ** 32) >>> 0, '나', `봇 (${{ easy: '느림', normal: '보통', hard: '빠름' }[botLv]})`);
+  countdown(beginPlay);
+}
+
+// ===================== online opponent (WebSocket to the match server) =====================
+function makeSocketNet(nick, room) {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(nick)}`);
+  let oppName = '상대';
+  const send = o => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
+  const api = {
+    attack(n, m) { const id = 1 + Math.floor(Math.random() * 1e6); send({ t: 'attack', id, n, m }); return id; },
+    defend(id, ok, remain) { send({ t: 'defend', id, ok, remain }); },
+    progress(p) { send({ t: 'progress', ...p }); },
+    finish(f) { send({ t: 'finish', ...f }); },
+    concede(f) { send({ t: 'concede', ...f }); },
+    ready() { send({ t: 'ready' }); setNote('준비 완료 · 상대를 기다리는 중'); },
+    tick: null,
+  };
+  ws.addEventListener('open', () => setNote(`방 ${room}에 입장했습니다. 상대가 들어오면 둘 다 준비를 누르세요.`));
+  ws.addEventListener('close', () => { setNote('서버 연결이 끊겼습니다.'); $('ready').hidden = true; });
+  ws.addEventListener('error', () => setNote('서버에 연결할 수 없습니다. 배포한 사이트 주소에서 열었는지 확인하세요.'));
+  ws.addEventListener('message', ev => {
+    let d; try { d = JSON.parse(ev.data); } catch (_) { return; }
+    if (d.t === 'room') {
+      const other = d.players.find(p => p.slot !== d.you);
+      oppName = other ? other.name : '상대';
+      $('ready').hidden = !other;
+      setNote(other ? `상대: ${other.name}${other.ready ? ' (준비됨)' : ''}. 준비를 누르세요.` : `방 ${room} · 상대를 기다리는 중`);
+    } else if (d.t === 'full') { setNote('방이 가득 찼습니다. 다른 방 코드를 쓰세요.'); }
+    else if (d.t === 'start') {
+      $('ov-res').hidden = true;
+      newMatch(d.seed, nick, oppName); countdown(beginPlay);
+    } else if (d.t === 'opp') { if (G) { G.opp.pct = d.pct; G.opp.gauge = d.gauge; G.opp.steps = d.steps; renderOpp(); } }
+    else if (d.t === 'incoming') incoming(d.id, d.n, d.m);
+    else if (d.t === 'outcome') { if (G) log(d.ok ? `상대가 공격 #${d.id}을 막았습니다` : `공격 #${d.id} 명중`, d.ok ? 'hit' : 'atk'); }
+    else if (d.t === 'oppFinish') { if (G) { G.opp.finished = true; G.opp.score = d.score; log(`상대 클리어 · 점수 ${(d.score / 1000).toFixed(1)}`, 'hit'); renderOpp(); } }
+    else if (d.t === 'result') {
+      showResult({ rows: d.rows.map(x => ({ ...x, me: x.slot === d.you, note: x.conceded ? '포기' : x.left ? '나감' : '미완료' })), winnerIdx: d.winnerIdx });
+    }
+  });
+  return api;
+}
+function setNote(t) { $('setup-note').textContent = t; }
+
+// ---------- setup UI ----------
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  $('bot-opts').hidden = mode !== 'bot'; $('online-opts').hidden = mode !== 'online';
+  if (mode === 'online') {
+    const onSite = /^https?:$/.test(location.protocol) && !/claude|anthropic|claudeusercontent/.test(location.hostname);
+    setNote(onSite ? '닉네임과 방 코드를 정하고 입장하세요. 같은 방 코드로 들어온 두 사람이 대전합니다.' : '온라인 대전은 서버에 배포한 사이트에서만 됩니다. 이 페이지에서는 봇 연습만 할 수 있어요.');
+  } else setNote('봇은 실제 판을 풀지 않고 진행 속도와 공격만 흉내 냅니다. 규칙과 수치 감각을 맞추는 용도예요.');
+}));
+document.querySelectorAll('[data-lv]').forEach(b => b.addEventListener('click', () => {
+  botLv = b.dataset.lv; document.querySelectorAll('[data-lv]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+$('bot-start').addEventListener('click', e => { e.currentTarget.blur(); startBot(); });
+$('room-new').addEventListener('click', () => { $('room').value = Math.random().toString(36).slice(2, 7).toUpperCase(); });
+$('room-join').addEventListener('click', () => {
+  const nick = $('nick').value.trim() || '플레이어', room = $('room').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!room) { setNote('방 코드를 입력하거나 새 방을 누르세요.'); return; }
+  store.set('ms1v1-nick', nick); $('room').value = room;
+  net = makeSocketNet(nick, room);
+});
+$('ready').addEventListener('click', e => { e.currentTarget.blur(); if (net && net.ready) net.ready(); });
+$('nick').value = store.get('ms1v1-nick') || '';
+function applyRotate() {
+  $('rotate').setAttribute('aria-pressed', String(rotated));
+  if (G) { buildBoard(); renderAll(); }
+}
+$('rotate').addEventListener('click', e => { e.currentTarget.blur(); rotated = !rotated; store.set('ms1v1-rot', rotated); applyRotate(); });
+applyRotate();
+
+// idle preview board so the page is never empty
+net = makeBotNet('normal');
+newMatch(0xC0FFEE, '나', '봇 (보통)');
+G.phase = 'idle';
+renderAll();
+setStatus('모드를 고르고 시작을 누르세요. 아래는 미리 보기 판입니다.');
+</script>
+</body>
+</html>
