@@ -483,7 +483,7 @@ function newMatch(seed, myName, oppName) {
   const NB = neighbors(w, h);
   const { mines, start } = makeMatchBoard(seed, w, h, m);
   const count = mines.map((_, i) => NB[i].filter(j => mines[j]).length);
-  G = { seed, w, h, m, NB, mines, count, start,
+  G = { seed, w, h, m, NB, mines, count, start, veiled: true,
     open: new Array(w * h).fill(false), flag: new Array(w * h).fill(false), ever: new Array(w * h).fill(false),
     safeTotal: w * h - m, openCount: 0,
     phase: 'count', time: 0, steps: 0, attempt: 0, req: null,
@@ -717,7 +717,8 @@ function renderBoard() {
   const showMines = G.phase === 'over';
   for (let i = 0; i < cellEls.length; i++) {
     const c = cellEls[i]; let cls = 'cell', html = '';
-    if (G.flag[i]) { cls += ' flag'; html = FLAG; }
+    if (G.veiled) cls += ' hidden'; // board stays face-down until the countdown reaches 1
+    else if (G.flag[i]) { cls += ' flag'; html = FLAG; }
     else if (G.open[i]) { const n = G.count[i]; cls += ' open' + (n ? ' n' + n : ''); html = n ? String(n) : ''; }
     else if (showMines && G.mines[i]) { cls += ' open'; html = MINE; }
     else cls += ' hidden';
@@ -729,7 +730,7 @@ function renderBoard() {
 }
 function renderStats() {
   $('s-time').textContent = (G.time / 1000).toFixed(1);
-  $('s-left').textContent = G.safeTotal - G.openCount;
+  $('s-left').textContent = G.veiled ? '–' : G.safeTotal - G.openCount;
   $('s-flags').textContent = G.flag.filter(Boolean).length;
   $('s-steps').textContent = G.steps;
   const nf = G.mines.filter((mn, i) => mn && !G.flag[i]).length;
@@ -890,7 +891,11 @@ window.addEventListener('mouseup', e => {
 function countdown(cb) {
   const ov = $('ov-count'), el = $('count'); let n = 3;
   ov.hidden = false; el.textContent = n;
-  const t = setInterval(() => { n--; if (n <= 0) { clearInterval(t); ov.hidden = true; cb(); } else el.textContent = n; }, 1000);
+  const t = setInterval(() => { n--;
+    if (n <= 0) { clearInterval(t); ov.hidden = true; cb(); return; }
+    el.textContent = n;
+    if (n === 1 && G) { G.veiled = false; renderBoard(); renderStats(); }
+  }, 1000);
 }
 function beginPlay() { G.phase = 'play'; lastT = performance.now(); setStatus('시작! 지정 키를 누른 채로 클릭하세요.'); renderAll(); }
 function showResult(r) {
